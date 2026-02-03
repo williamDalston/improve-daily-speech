@@ -248,81 +248,11 @@ EPISODE_LENGTHS = ["5 min", "10 min", "15 min", "20 min"]
 
 PIPELINE_LABELS = [
     "Research", "Drafts", "Judge",
-    "Critique 1", "Enhancement 1",
-    "Critique 2", "Enhancement 2",
-    "Critique 3", "Enhancement 3",
-    "Critique 4", "Final Polish",
+    "Critique 1", "Deep Enhancement",
+    "Critique 2", "Final Polish",
 ]
 
 
-# ── Helper: render pipeline output ─────────────────────────
-def _render_pipeline_output(steps, final_text, topic, key_prefix="main"):
-    """Show completed pipeline stages as expandable sections."""
-    if not steps:
-        return
-
-    # Group: show final speech prominently first, then details below
-    if final_text:
-        st.markdown("---")
-        col_wc, col_txt, col_doc = st.columns([1, 1, 1])
-        with col_wc:
-            st.metric("Words", f"{len(final_text.split()):,}")
-        with col_txt:
-            st.download_button(
-                "Download .txt", data=final_text,
-                file_name="transcript.txt", mime="text/plain",
-                key=f"{key_prefix}_dl_txt", use_container_width=True,
-            )
-        with col_doc:
-            docx_bytes = export_docx(final_text, topic or "Episode")
-            st.download_button(
-                "Download .docx", data=docx_bytes,
-                file_name="transcript.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                key=f"{key_prefix}_dl_docx", use_container_width=True,
-            )
-
-    # Pipeline details — collapsed by default
-    with st.expander("View pipeline details", expanded=False):
-        for idx, (step_name, step_type, data) in enumerate(steps):
-            if data.get("status") != "done" and step_type != "done":
-                continue
-
-            if step_type == "research":
-                st.markdown(f"**{step_name}**")
-                st.markdown(data["text"])
-                st.markdown("---")
-
-            elif step_type == "drafts":
-                st.markdown(f"**{step_name}**")
-                drafts = data["drafts"]
-                tabs = st.tabs([d["label"] for d in drafts])
-                for tab, draft in zip(tabs, drafts):
-                    with tab:
-                        st.markdown(draft["text"])
-                        st.caption(f"{len(draft['text'].split())} words")
-                st.markdown("---")
-
-            elif step_type == "judge":
-                st.markdown(f"**{step_name}**")
-                st.success(f"Winner: **{data.get('winner_label', 'N/A')}**")
-                st.markdown(data.get("judgment", ""))
-                st.markdown("---")
-
-            elif step_type == "critique":
-                st.markdown(f"**{step_name}**")
-                st.markdown(data["text"])
-                st.markdown("---")
-
-            elif step_type == "enhancement":
-                stage_idx = data.get("stage_index", 0)
-                is_final = (stage_idx == 3)
-                label = "**Final Speech**" if is_final else f"**{step_name}**"
-                st.markdown(label)
-                st.markdown(data["text"])
-                st.caption(f"{len(data['text'].split())} words")
-                if not is_final:
-                    st.markdown("---")
 
 
 # ── Helper: audio player ───────────────────────────────────
@@ -355,49 +285,41 @@ def _render_audio_player(audio_bytes: bytes, key_prefix: str):
 
 
 def _render_audio_section(speech_id: int, user_id: int, final_text: str, key_prefix: str):
-    """Audio generation and playback."""
+    """Audio generation and playback - simple and focused."""
     existing_audio = get_audio(speech_id, user_id)
 
     if existing_audio:
         _render_audio_player(existing_audio, key_prefix)
 
-        col_dl, col_regen = st.columns(2)
-        with col_dl:
-            st.download_button(
-                "Download MP3", data=existing_audio,
-                file_name="speech.mp3", mime="audio/mpeg",
-                key=f"{key_prefix}_dl_mp3", use_container_width=True,
-            )
-        with col_regen:
-            if st.button("Regenerate Audio", key=f"{key_prefix}_regen_audio", use_container_width=True):
-                st.session_state[f"{key_prefix}_gen_audio"] = True
-                st.rerun()
+        # Simple download button
+        st.download_button(
+            "Download MP3", data=existing_audio,
+            file_name="episode.mp3", mime="audio/mpeg",
+            key=f"{key_prefix}_dl_mp3", use_container_width=True,
+        )
 
-    if not existing_audio or st.session_state.get(f"{key_prefix}_gen_audio"):
-        col_voice, col_speed = st.columns(2)
-        with col_voice:
+        # Voice options in expander for those who want customization
+        with st.expander("Change voice"):
             voice_name = st.selectbox(
                 "Voice", options=list(VOICES.keys()), index=0,
-                key=f"{key_prefix}_voice",
+                key=f"{key_prefix}_voice", label_visibility="collapsed",
             )
-        with col_speed:
-            gen_speed = st.slider(
-                "Speed", min_value=0.75, max_value=1.5, value=1.0, step=0.05,
-                key=f"{key_prefix}_gen_speed",
-                help="Baked-in pace. Use the player slider for real-time changes.",
-            )
-
-        voice_id = VOICES[voice_name]
-
-        if st.button(
-            "Generate Audio" if not existing_audio else "Regenerate with New Settings",
-            type="primary", key=f"{key_prefix}_gen_btn", use_container_width=True,
-        ):
-            with st.spinner(f"Generating audio with '{voice_name.split(' (')[0]}' voice..."):
+            if st.button("Regenerate", key=f"{key_prefix}_regen", use_container_width=True):
+                voice_id = VOICES[voice_name]
+                with st.spinner(f"Regenerating with {voice_name.split(' (')[0]}..."):
+                    try:
+                        audio_bytes = generate_audio(final_text, voice=voice_id, speed=1.0)
+                        save_audio(speech_id, user_id, audio_bytes, voice_id)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Audio generation failed: {e}")
+    else:
+        # Generate audio if none exists
+        if st.button("Generate Audio", type="primary", key=f"{key_prefix}_gen_btn", use_container_width=True):
+            with st.spinner("Creating audio..."):
                 try:
-                    audio_bytes = generate_audio(final_text, voice=voice_id, speed=gen_speed)
-                    save_audio(speech_id, user_id, audio_bytes, voice_id)
-                    st.session_state.pop(f"{key_prefix}_gen_audio", None)
+                    audio_bytes = generate_audio(final_text, voice="onyx", speed=1.0)
+                    save_audio(speech_id, user_id, audio_bytes, "onyx")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Audio generation failed: {e}")
@@ -447,36 +369,22 @@ def user_can_generate() -> bool:
 
 
 def render_paywall():
-    """Render subscription paywall."""
+    """Render subscription prompt."""
     st.markdown("")
-    st.markdown(f"""
+    st.markdown("""
     <div class="paywall-card">
-        <h2>You've used your {FREE_EPISODE_LIMIT} free episodes</h2>
+        <h2>Keep learning</h2>
         <p style="font-size: 1.1rem; max-width: 400px; margin: 0 auto 1rem auto;">
-            Subscribe to unlock unlimited documentary-style audio on any topic you want to master.
+            Unlock unlimited episodes on any topic that fascinates you.
         </p>
         <div class="paywall-price">$19.99<span>/month</span></div>
-        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-width: 280px; margin: 1.5rem auto 0 auto; text-align: left;">
-            <div class="feature-item">
-                <span>&#10003;</span> Unlimited episodes
-            </div>
-            <div class="feature-item">
-                <span>&#10003;</span> AI research & expert perspectives
-            </div>
-            <div class="feature-item">
-                <span>&#10003;</span> Professional documentary audio
-            </div>
-            <div class="feature-item">
-                <span>&#10003;</span> Download transcripts & audio
-            </div>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("Subscribe Now", type="primary", use_container_width=True):
+        if st.button("Continue", type="primary", use_container_width=True):
             base_url = st.context.headers.get("Origin", "http://localhost:8501")
             checkout_url = create_checkout_session(user["email"], user["id"], base_url)
             st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
@@ -498,7 +406,7 @@ for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# ── Sidebar (minimal) ──────────────────────────────────────
+# ── Sidebar (clean & minimal) ──────────────────────────────
 with st.sidebar:
     render_user_menu()
     st.markdown("---")
@@ -506,51 +414,26 @@ with st.sidebar:
     if st.button("New Episode", use_container_width=True, type="primary"):
         st.session_state.view = "create"
         st.session_state.viewing_speech = None
+        st.session_state.steps = []
+        st.session_state.final_text = None
         st.rerun()
     if st.button("My Episodes", use_container_width=True):
         st.session_state.view = "library"
         st.rerun()
 
-    # Subscription status
-    st.markdown("---")
-    if is_free_user(user["email"]):
-        st.caption("Unlimited Access")
-    else:
-        sub = get_user_subscription(user["id"])
-        if sub["status"] == "active":
-            st.caption("Subscribed")
-            if sub["customer_id"]:
-                base_url = st.context.headers.get("Origin", "http://localhost:8501")
-                portal_url = get_customer_portal_url(sub["customer_id"], base_url)
-                st.link_button("Manage Subscription", portal_url, use_container_width=True)
-        else:
-            # Show free episodes remaining
-            remaining = get_free_episodes_remaining(user["id"])
-            if remaining > 0:
-                st.caption(f"Free: {remaining}/{FREE_EPISODE_LIMIT} episodes left")
-            else:
-                st.caption("Free trial used")
-
-    # Pipeline progress (only during create view)
-    if st.session_state.view == "create" and st.session_state.steps:
+    # Subscription management (only show if subscribed)
+    sub = get_user_subscription(user["id"])
+    if sub["status"] == "active" and sub["customer_id"]:
         st.markdown("---")
-        st.caption("PIPELINE PROGRESS")
-        completed = len([s for s in st.session_state.steps
-                        if s[2].get("status") == "done"])
-        st.progress(min(completed / 11, 1.0))
-        for step_name, step_type, data in st.session_state.steps:
-            if data.get("status") == "done":
-                st.markdown(f'<span class="step-done">✓ {step_name}</span>',
-                           unsafe_allow_html=True)
+        base_url = st.context.headers.get("Origin", "http://localhost:8501")
+        portal_url = get_customer_portal_url(sub["customer_id"], base_url)
+        st.link_button("Manage Subscription", portal_url, use_container_width=True)
 
 
 # ════════════════════════════════════════════════════════════
 # VIEW: Create
 # ════════════════════════════════════════════════════════════
 if st.session_state.view == "create":
-    st.markdown('<h1 class="hero-title">Explore a Topic</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-subtitle">Transform any topic into an engaging documentary that makes knowledge stick</p>', unsafe_allow_html=True)
-
     # Check subscription before showing form
     can_generate = user_can_generate()
 
@@ -558,29 +441,25 @@ if st.session_state.view == "create":
         render_paywall()
         st.stop()
 
-    st.markdown("**What do you want to learn about?**")
+    # Clean, focused hero
+    st.markdown('<h1 class="hero-title">What do you want to learn?</h1>', unsafe_allow_html=True)
+
     topic = st.text_area(
         "Topic",
-        height=100,
-        placeholder="Enter your topic... e.g., 'The future of renewable energy and why it matters for the next generation'",
+        height=80,
+        placeholder="e.g., How does memory work and how can I improve mine?",
         label_visibility="collapsed",
     )
 
-    # Episode length selector with better layout
-    col_length, col_info = st.columns([1, 2])
-    with col_length:
-        length = st.selectbox(
-            "Duration",
-            options=EPISODE_LENGTHS,
-            index=1,
-            help="Approximate speaking time at normal pace",
-        )
-    with col_info:
-        length_words = {"5 min": "~750", "10 min": "~1,500", "15 min": "~2,250", "20 min": "~3,000"}
-        st.caption(f"")
-        st.markdown(f"<p style='color: #64748b; font-size: 0.9rem; margin-top: 1.7rem;'>{length_words.get(length, '')} words</p>", unsafe_allow_html=True)
+    # Simple duration selector inline
+    length = st.select_slider(
+        "Episode length",
+        options=EPISODE_LENGTHS,
+        value="10 min",
+        label_visibility="collapsed",
+    )
+    st.caption(f"{length} episode")
 
-    st.markdown("")
     generate = st.button(
         "Create Episode",
         type="primary",
@@ -597,23 +476,21 @@ if st.session_state.view == "create":
         st.session_state.running = True
         st.session_state.error = None
 
-        # Enhanced progress display
+        # Clean progress display
         st.markdown("---")
-        st.markdown("### Crafting your episode...")
-
         progress_bar = st.progress(0)
         status_container = st.empty()
 
-        total_steps = 11
+        total_steps = 8  # 7 pipeline steps + audio generation
         step_count = 0
 
         stage_messages = {
-            "research": "Researching your topic deeply...",
-            "drafts": "Creating multiple perspectives...",
-            "judge": "Selecting the best approach...",
-            "critique": "Analyzing and refining...",
-            "enhancement": "Polishing the content...",
-            "done": "Finalizing your episode...",
+            "research": "Gathering knowledge...",
+            "drafts": "Exploring perspectives...",
+            "judge": "Finding the best angle...",
+            "critique": "Refining ideas...",
+            "enhancement": "Polishing...",
+            "done": "Creating audio...",
         }
 
         try:
@@ -623,11 +500,10 @@ if st.session_state.view == "create":
                     st.session_state.steps.append((step_name, step_type, data))
                     progress_bar.progress(min(step_count / total_steps, 1.0))
                 else:
-                    msg = stage_messages.get(step_type, step_name)
+                    msg = stage_messages.get(step_type, "Working...")
                     status_container.markdown(f"""
-                    <div class="loading-card">
-                        <p style="font-size: 1.1rem; font-weight: 500; color: #475569; margin: 0;">{msg}</p>
-                        <p style="font-size: 0.875rem; color: #94a3b8; margin: 0.5rem 0 0 0;">{step_name}</p>
+                    <div style="text-align: center; padding: 1rem; color: #64748b;">
+                        {msg}
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -648,6 +524,19 @@ if st.session_state.view == "create":
             )
             st.session_state.last_speech_id = speech_id
 
+            # Generate audio immediately so it's ready when page refreshes
+            status_container.markdown("""
+            <div style="text-align: center; padding: 1rem; color: #64748b;">
+                Creating audio...
+            </div>
+            """, unsafe_allow_html=True)
+            try:
+                audio_bytes = generate_audio(st.session_state.final_text, voice="onyx", speed=1.0)
+                save_audio(speech_id, user["id"], audio_bytes, "onyx")
+                progress_bar.progress(1.0)
+            except Exception:
+                pass  # Audio will be generated on demand if this fails
+
         st.rerun()
 
     # Show error if any
@@ -655,30 +544,37 @@ if st.session_state.view == "create":
         st.error(st.session_state.error)
         st.session_state.error = None
 
-    # Show results with enhanced success message
-    if st.session_state.final_text:
-        word_count = len(st.session_state.final_text.split())
-        st.markdown(f"""
-        <div class="success-banner">
-            Your episode is ready! {word_count:,} words crafted for you.
-        </div>
-        """, unsafe_allow_html=True)
-
-    _render_pipeline_output(
-        st.session_state.steps, st.session_state.final_text,
-        st.session_state.topic, key_prefix="create",
-    )
-
-    # Audio
+    # Show results - clean and focused on listening
     if st.session_state.final_text and st.session_state.last_speech_id:
         st.markdown("---")
-        st.markdown("### Listen")
+        st.markdown(f"### {st.session_state.topic}")
+
+        # Audio first - already generated during pipeline
         _render_audio_section(
             speech_id=st.session_state.last_speech_id,
             user_id=user["id"],
             final_text=st.session_state.final_text,
             key_prefix="create_audio",
         )
+
+        # Transcript and details in expanders
+        with st.expander("Read transcript"):
+            st.markdown(st.session_state.final_text)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    "Download .txt", data=st.session_state.final_text,
+                    file_name="transcript.txt", mime="text/plain",
+                    key="create_dl_txt", use_container_width=True,
+                )
+            with col2:
+                docx_bytes = export_docx(st.session_state.final_text, st.session_state.topic or "Episode")
+                st.download_button(
+                    "Download .docx", data=docx_bytes,
+                    file_name="transcript.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="create_dl_docx", use_container_width=True,
+                )
 
 
 # ════════════════════════════════════════════════════════════
@@ -692,16 +588,16 @@ elif st.session_state.view == "library":
             st.error("Episode not found.")
             st.session_state.viewing_speech = None
         else:
-            # Header with back button
-            if st.button("← Back to Library", type="secondary"):
-                st.session_state.viewing_speech = None
-                st.rerun()
+            # Clean header with back
+            col_back, col_title = st.columns([1, 5])
+            with col_back:
+                if st.button("←", key="back_btn"):
+                    st.session_state.viewing_speech = None
+                    st.rerun()
 
-            st.markdown(f'<h1 class="hero-title" style="font-size: 1.8rem;">{speech["topic"]}</h1>', unsafe_allow_html=True)
-            st.markdown(f'<p class="hero-subtitle" style="font-size: 0.95rem;">{speech["created_at"][:10]}  ·  {speech["word_count"]:,} words</p>', unsafe_allow_html=True)
+            st.markdown(f'<h1 class="hero-title" style="font-size: 1.6rem;">{speech["topic"]}</h1>', unsafe_allow_html=True)
 
-            # Audio first
-            st.markdown("### Listen")
+            # Audio - primary focus
             _render_audio_section(
                 speech_id=speech["id"],
                 user_id=user["id"],
@@ -709,41 +605,32 @@ elif st.session_state.view == "library":
                 key_prefix=f"lib_audio_{speech['id']}",
             )
 
-            # Pipeline output
-            stages = speech.get("stages", [])
-            if stages:
-                steps = [(s["name"], s["type"], s["data"]) for s in stages]
-                _render_pipeline_output(
-                    steps, speech["final_text"], speech["topic"],
-                    key_prefix=f"lib_{speech['id']}",
-                )
-            else:
-                st.markdown("---")
+            # Transcript in expander
+            with st.expander("Read transcript"):
                 st.markdown(speech["final_text"])
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        "Download .txt", data=speech["final_text"],
+                        file_name="transcript.txt", mime="text/plain",
+                        key="lib_dl_txt", use_container_width=True,
+                    )
+                with col2:
+                    docx_bytes = export_docx(speech["final_text"], speech["topic"])
+                    st.download_button(
+                        "Download .docx", data=docx_bytes,
+                        file_name="transcript.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key="lib_dl_docx", use_container_width=True,
+                    )
 
-            # Actions
-            st.markdown("---")
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.download_button(
-                    "Download .txt", data=speech["final_text"],
-                    file_name="transcript.txt", mime="text/plain",
-                    key="lib_dl_txt", use_container_width=True,
-                )
-            with col2:
-                docx_bytes = export_docx(speech["final_text"], speech["topic"])
-                st.download_button(
-                    "Download .docx", data=docx_bytes,
-                    file_name="transcript.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="lib_dl_docx", use_container_width=True,
-                )
-            with col3:
-                if st.button("Delete Episode", key="lib_del", use_container_width=True):
-                    delete_speech(speech["id"], user["id"])
-                    st.session_state.viewing_speech = None
-                    st.toast("Episode deleted.")
-                    st.rerun()
+            # Delete at bottom, subtle
+            st.markdown("")
+            if st.button("Delete episode", key="lib_del", type="secondary"):
+                delete_speech(speech["id"], user["id"])
+                st.session_state.viewing_speech = None
+                st.toast("Episode deleted.")
+                st.rerun()
 
     else:
         st.markdown('<h1 class="hero-title">Your Episodes</h1>', unsafe_allow_html=True)
@@ -753,8 +640,8 @@ elif st.session_state.view == "library":
             st.markdown("")
             st.markdown("""
             <div style="text-align: center; padding: 3rem; background: #f8fafc; border-radius: 16px; border: 2px dashed #e2e8f0;">
-                <p style="font-size: 1.2rem; color: #64748b; margin-bottom: 1rem;">No episodes yet</p>
-                <p style="color: #94a3b8;">Create your first episode to get started!</p>
+                <p style="font-size: 1.2rem; color: #64748b; margin-bottom: 0.5rem;">No episodes yet</p>
+                <p style="color: #94a3b8;">Pick a topic you're curious about</p>
             </div>
             """, unsafe_allow_html=True)
             st.markdown("")
@@ -762,22 +649,13 @@ elif st.session_state.view == "library":
                 st.session_state.view = "create"
                 st.rerun()
         else:
-            st.markdown(f'<p class="hero-subtitle">{len(speeches)} episode{"s" if len(speeches) != 1 else ""} created</p>', unsafe_allow_html=True)
-
             for speech in speeches:
                 st.markdown(
-                    f'<div class="episode-card">'
+                    f'<div class="episode-card" style="cursor: pointer;">'
                     f'<h4>{speech["topic"]}</h4>'
-                    f'<span class="meta">{speech["created_at"][:10]}  ·  '
-                    f'{speech["word_count"]:,} words</span></div>',
+                    f'<span class="meta">{speech["created_at"][:10]}</span></div>',
                     unsafe_allow_html=True,
                 )
-                col_open, col_del = st.columns([5, 1])
-                with col_open:
-                    if st.button("Open", key=f"open_{speech['id']}", use_container_width=True):
-                        st.session_state.viewing_speech = speech["id"]
-                        st.rerun()
-                with col_del:
-                    if st.button("🗑️", key=f"del_{speech['id']}"):
-                        delete_speech(speech["id"], user["id"])
-                        st.rerun()
+                if st.button("Listen", key=f"open_{speech['id']}", use_container_width=True):
+                    st.session_state.viewing_speech = speech["id"]
+                    st.rerun()
