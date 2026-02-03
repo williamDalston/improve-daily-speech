@@ -7,3 +7,4 @@ google-auth>=2.0.0
 google-auth-oauthlib>=1.0.0
 stripe>=7.0.0
 pydub>=0.25.0
+lumaai>=1.0.0
