@@ -2019,7 +2019,7 @@ elif st.session_state.view == "reflect":
         if st.button("Start Exercise", type="primary", disabled=not context.strip(), use_container_width=True, key="sm_meaning_start"):
             st.session_state.sm_mode_used = "meaning"
             st.session_state.sm_context_used = context
-            st.session_state.sm_module_used = selected_module["name"]
+            st.session_state.sm_module_used = module["name"]
             st.session_state.sm_exercise_used = exercise["name"]
             st.session_state.sm_last_reflection_id = None
             st.session_state.sm_audio = None
