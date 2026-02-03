@@ -203,31 +203,28 @@ def render_login_page():
     </div>
     """, unsafe_allow_html=True)
 
-    if not is_configured():
-        # Dev mode
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.markdown("")
-            st.caption("Development Mode")
-            dev_name = st.text_input("Name", value="Developer")
-            dev_email = st.text_input("Email", value="dev@localhost")
-            st.markdown("")
-            if st.button("Continue", type="primary", use_container_width=True):
-                from database import get_or_create_user
-                user = get_or_create_user(
-                    email=dev_email, name=dev_name, provider="dev"
-                )
-                st.session_state.user = user
-                st.rerun()
-        return False
-
-    # Google login
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        login_url = get_login_url()
-        st.link_button("Continue with Google", login_url, use_container_width=True, type="primary")
+        # Google login (if configured)
+        if is_configured():
+            login_url = get_login_url()
+            st.link_button("Continue with Google", login_url, use_container_width=True, type="primary")
+            st.markdown("")
+            st.caption("We only access your name and email to personalize your experience.")
+            st.markdown("---")
+            st.caption("Or continue with email")
+
+        # Email login (always available, defaults to free access email)
+        dev_name = st.text_input("Name", value="Test User")
+        dev_email = st.text_input("Email", value="test@example.com")
         st.markdown("")
-        st.caption("We only access your name and email to personalize your experience.")
+        if st.button("Continue with Email", type="primary" if not is_configured() else "secondary", use_container_width=True):
+            from database import get_or_create_user
+            user = get_or_create_user(
+                email=dev_email, name=dev_name, provider="email"
+            )
+            st.session_state.user = user
+            st.rerun()
 
     return False
 
