@@ -7,7 +7,6 @@ import os
 
 import openai
 from docx import Document
-from pydub import AudioSegment
 from docx.shared import Pt
 from dotenv import load_dotenv
 
@@ -60,6 +59,9 @@ def generate_audio(text: str, voice: str = "onyx", speed: float = 1.0) -> bytes:
 
     Returns MP3 bytes.
     """
+    # Lazy import: pydub uses audioop which was removed in Python 3.13
+    from pydub import AudioSegment
+
     chunks = _split_for_tts(text, max_chars=4000)
 
     # Generate audio for each chunk
