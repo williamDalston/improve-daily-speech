@@ -34,18 +34,26 @@ from prompts import (
 
 load_dotenv()
 
-# On Streamlit Cloud, secrets are in st.secrets, not env vars.
-# Copy them into the environment so the SDK clients can find them.
-try:
-    import streamlit as st
-    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
-        if key not in os.environ and key in st.secrets:
-            os.environ[key] = st.secrets[key]
-except Exception:
-    pass
 
-anthropic_client = anthropic.Anthropic()
-openai_client = openai.OpenAI()
+def _init_keys():
+    """Load API keys from st.secrets (Streamlit Cloud) into env vars."""
+    try:
+        import streamlit as st
+        for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+            if key not in os.environ and key in st.secrets:
+                os.environ[key] = st.secrets[key]
+    except Exception:
+        pass
+
+
+def _get_anthropic_client():
+    _init_keys()
+    return anthropic.Anthropic()
+
+
+def _get_openai_client():
+    _init_keys()
+    return openai.OpenAI()
 
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 DEFAULT_OPENAI_MODEL = "gpt-4o-2024-11-20"
@@ -87,7 +95,7 @@ def _call_llm(
     """Unified LLM call for both Anthropic and OpenAI."""
     if provider == "openai":
         model = model_override or DEFAULT_OPENAI_MODEL
-        response = openai_client.chat.completions.create(
+        response = _get_openai_client().chat.completions.create(
             model=model,
             max_tokens=MAX_TOKENS,
             temperature=temperature,
@@ -100,7 +108,7 @@ def _call_llm(
 
     else:  # anthropic
         model = model_override or DEFAULT_ANTHROPIC_MODEL
-        message = anthropic_client.messages.create(
+        message = _get_anthropic_client().messages.create(
             model=model,
             max_tokens=MAX_TOKENS,
             temperature=temperature,

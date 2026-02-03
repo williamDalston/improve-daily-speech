@@ -12,15 +12,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# On Streamlit Cloud, secrets are in st.secrets, not env vars.
-try:
-    import streamlit as st
-    if "OPENAI_API_KEY" not in os.environ and "OPENAI_API_KEY" in st.secrets:
-        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-except Exception:
-    pass
 
-_openai_client = openai.OpenAI()
+def _get_openai_client():
+    """Lazy client init — works on Streamlit Cloud where secrets aren't in env."""
+    try:
+        import streamlit as st
+        if "OPENAI_API_KEY" not in os.environ and "OPENAI_API_KEY" in st.secrets:
+            os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        pass
+    return openai.OpenAI()
 
 
 def export_txt(text: str) -> str:
@@ -61,7 +62,7 @@ def generate_audio(text: str, voice: str = "onyx", speed: float = 1.0) -> bytes:
     audio_parts = []
 
     for chunk in chunks:
-        response = _openai_client.audio.speech.create(
+        response = _get_openai_client().audio.speech.create(
             model="tts-1-hd",
             voice=voice,
             input=chunk,
