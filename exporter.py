@@ -48,7 +48,7 @@ def export_docx(text: str, title: str) -> bytes:
 
 def generate_audio(text: str, voice: str = "onyx", speed: float = 1.0) -> bytes:
     """
-    Generate speech audio from text using OpenAI TTS.
+    Generate documentary-style audio from text using OpenAI TTS.
 
     OpenAI TTS has a 4096 character limit per request, so we split
     long texts into chunks and concatenate the audio.

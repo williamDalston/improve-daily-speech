@@ -1,14 +1,16 @@
 """
 MindCast content generation pipeline.
 
-Pipeline flow (optimized for speed):
+Pipeline flow (optimized for quality):
   Stage 0: Research Gathering (collect facts, studies, figures)
   Stage 1: Initial Script (2 parallel drafts - Sonnet + GPT-4o)
   Judge:   Select best draft
-  Critique: Evaluate draft for enhancement
-  Stage 2: Deep Enhancement (artistic + academic depth)
-  Critique: Evaluate before final polish
-  Stage 3: Final Polish & Humanization
+
+  Enhancement loop (4 stages, each with critique before):
+    Stage 2: Deep Enhancement (artistic + academic depth)
+    Stage 3: De-AI & Voice Authenticity (strip LLM patterns, inject personality)
+    Stage 4: Oral Delivery Optimization (breath, rhythm, mouth-feel)
+    Stage 5: Final Polish (line-by-line refinement)
 
 Every stage after Stage 0 receives the original topic + research brief for context.
 """
@@ -315,7 +317,7 @@ CRITIQUE_TEMPLATE = {
     "model_override": "gpt-4o-2024-11-20",
 }
 
-# --- Enhancement stages (reduced to 2 for speed while maintaining quality) ---
+# --- Enhancement stages (4 stages for maximum quality) ---
 ENHANCEMENT_STAGES = [
     {
         "name": "Stage 2: Deep Enhancement",
@@ -356,37 +358,118 @@ ENHANCEMENT_STAGES = [
         "model_override": "claude-sonnet-4-20250514",
     },
     {
-        "name": "Stage 3: Final Polish & Humanization",
-        "description": "Adds human voice, natural rhythm, and meticulous line-by-line refinement",
+        "name": "Stage 3: De-AI & Voice Authenticity",
+        "description": "Strips LLM patterns and injects genuine, idiosyncratic voice",
         "system": (
-            "You are a meticulous final-pass editor who specializes in making polished text feel authentically human. "
-            "You go line by line, ensuring every word earns its place while adding warmth, spontaneity, and natural speech patterns. "
-            "You maintain scientific accuracy and human authenticity in equal measure."
+            "You are an expert at detecting and eliminating AI-generated writing patterns. "
+            "You have an uncanny ability to spot the telltale signs of LLM output and replace them with "
+            "genuinely human, idiosyncratic expression. You make writing sound like it came from a specific, "
+            "opinionated person — not a helpful assistant."
         ),
         "user_template": (
             "Topic: '{topic}'\n"
-            "Research brief (verify all facts against this):\n{research}\n\n"
-            "Critique from editorial review (final check — address any remaining issues):\n{critique}\n\n"
+            "Research brief:\n{research}\n\n"
+            "Critique:\n{critique}\n\n"
             "---\n\n"
-            "Take the following text and apply these final refinements:\n\n"
+            "The following script needs to be DE-ROBOTIZED. Find and fix ALL instances of:\n\n"
             "{previous_output}\n\n"
-            "**HUMANIZATION:**\n"
-            "- Break rhythm by varying sentence length; mix in natural fragments\n"
-            "- Introduce subtle digressions, personal reflections, or gentle humor\n"
-            "- Allow some imperfection — sentence fragments and colloquialisms as stylistic choices\n"
-            "- Let meaning emerge through imagery and subtext, not just explicit statements\n"
-            "- Shift tone naturally — analytical to poetic, formal to casual, confident to curious\n"
-            "- Reduce obvious transitions; let ideas flow organically\n"
-            "- Craft unique expressions with creative word choices\n\n"
-            "**FINAL POLISH:**\n"
-            "- Go line by line ensuring every word is carefully chosen for effect\n"
-            "- Maintain scientific theories, discoveries, and debates with casual rigor\n"
-            "- Restore key facts while keeping the human tone intact\n"
-            "- Do not remove any content\n\n"
-            "The result should sound like an expert sharing fascinating knowledge in an intimate, engaging way — "
-            "not a polished essay, but a real person talking about something they love."
+            "**LLM PATTERNS TO ELIMINATE:**\n"
+            "- Generic openings: 'In today's world...', 'Have you ever wondered...', 'Let's dive in...'\n"
+            "- Overused intensifiers: 'crucial', 'vital', 'essential', 'fascinating', 'remarkable'\n"
+            "- Hedging phrases: 'It's worth noting', 'Interestingly enough', 'One might argue'\n"
+            "- Smooth transitions: 'Moreover', 'Furthermore', 'Additionally', 'That being said'\n"
+            "- Empty validation: 'This is important because...', 'What makes this significant is...'\n"
+            "- Perfect parallel structure everywhere (real humans are messier)\n"
+            "- Overly balanced 'on one hand / on the other hand' constructions\n"
+            "- Concluding with neat summaries or calls to action\n\n"
+            "**INJECT AUTHENTIC VOICE:**\n"
+            "- Add unexpected word choices that a specific person might use\n"
+            "- Include mild opinions, preferences, or gentle skepticism\n"
+            "- Let some sentences trail off or pivot mid-thought\n"
+            "- Use contractions naturally ('it's', 'don't', 'can't')\n"
+            "- Add the occasional 'actually', 'honestly', 'look', 'here's the thing'\n"
+            "- Reference personal experience or curiosity ('I always found it strange that...')\n"
+            "- Be willing to say 'I don't know' or 'this is still debated'\n\n"
+            "The result should pass the 'would a real person say this?' test. "
+            "Every sentence should sound like it came from someone with actual opinions and personality."
+        ),
+        "temperature": 0.8,
+        "provider": "anthropic",
+        "model_override": "claude-sonnet-4-20250514",
+    },
+    {
+        "name": "Stage 4: Oral Delivery Optimization",
+        "description": "Optimizes specifically for spoken delivery - breath, rhythm, and mouth-feel",
+        "system": (
+            "You are a voice-over director and speech coach who optimizes written text for audio delivery. "
+            "You understand that spoken prose is fundamentally different from written prose — it must flow "
+            "naturally when read aloud, with room to breathe, natural emphasis points, and no tongue-twisters. "
+            "You make text a pleasure to listen to."
+        ),
+        "user_template": (
+            "Topic: '{topic}'\n"
+            "Research brief:\n{research}\n\n"
+            "Critique:\n{critique}\n\n"
+            "---\n\n"
+            "Optimize this script specifically for AUDIO DELIVERY:\n\n"
+            "{previous_output}\n\n"
+            "**BREATH & RHYTHM:**\n"
+            "- Break sentences that are too long for a single breath (max ~25 words)\n"
+            "- Add natural pause points with punctuation (commas, em-dashes, periods)\n"
+            "- Vary sentence length to create rhythm: short punchy lines, then longer flowing ones\n"
+            "- Ensure complex ideas have breathing room — don't stack dense concepts\n\n"
+            "**MOUTH-FEEL & FLOW:**\n"
+            "- Eliminate tongue-twisters and awkward consonant clusters\n"
+            "- Avoid words that are hard to pronounce or sound similar (homophones in sequence)\n"
+            "- Check for unintentional rhymes or repetitive sounds\n"
+            "- Make sure emphasis falls on important words, not throwaway ones\n\n"
+            "**LISTENER ENGAGEMENT:**\n"
+            "- Add micro-hooks every 30-60 seconds (questions, surprising facts, 'here's the thing')\n"
+            "- Create 'wait for it' moments where you build anticipation before a reveal\n"
+            "- Use direct address ('you', 'your', 'imagine') to maintain connection\n"
+            "- Ensure the opening 30 seconds are absolutely gripping\n\n"
+            "**AUDIO-SPECIFIC:**\n"
+            "- Numbers should be easy to say and hear (not '47.3%' but 'nearly half')\n"
+            "- Spell out abbreviations that sound awkward when spoken\n"
+            "- Avoid parenthetical asides that work in writing but confuse listeners\n\n"
+            "Read the entire script aloud in your mind. Fix anything that doesn't flow naturally."
         ),
         "temperature": 0.5,
+        "provider": "anthropic",
+        "model_override": "claude-sonnet-4-20250514",
+    },
+    {
+        "name": "Stage 5: Final Polish",
+        "description": "Final line-by-line refinement ensuring every word earns its place",
+        "system": (
+            "You are a meticulous final-pass editor. You go line by line with surgical precision, "
+            "ensuring every single word earns its place. You cut ruthlessly, tighten relentlessly, "
+            "and polish until the text gleams. You are the last line of defense before publication."
+        ),
+        "user_template": (
+            "Topic: '{topic}'\n"
+            "Research brief (verify facts):\n{research}\n\n"
+            "Critique (final check):\n{critique}\n\n"
+            "---\n\n"
+            "FINAL PASS. Go line by line through this script:\n\n"
+            "{previous_output}\n\n"
+            "**TIGHTEN:**\n"
+            "- Cut any word that doesn't add meaning\n"
+            "- Replace weak verbs with strong, specific ones\n"
+            "- Eliminate redundancy ('absolutely essential' → 'essential')\n"
+            "- Remove filler ('really', 'very', 'quite', 'just', 'actually' unless purposeful)\n\n"
+            "**VERIFY:**\n"
+            "- Every fact, name, date, and number must be accurate per the research brief\n"
+            "- Remove or qualify anything that sounds made up or too good to be true\n"
+            "- Ensure claims are appropriately hedged ('often' vs 'always')\n\n"
+            "**FINAL CHECK:**\n"
+            "- Opening must hook immediately — no throat-clearing\n"
+            "- Ending must resonate — no weak fade-outs or cliché conclusions\n"
+            "- Overall arc should feel complete and satisfying\n"
+            "- The piece should leave the listener changed in some small way\n\n"
+            "Do NOT add content. Only refine what exists. Make every word count."
+        ),
+        "temperature": 0.3,
         "provider": "anthropic",
         "model_override": "claude-sonnet-4-20250514",
     },

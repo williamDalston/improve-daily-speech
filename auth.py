@@ -140,55 +140,56 @@ def render_login_page():
                 st.rerun()
         return False
 
-    # ── Login page with enhanced styling ──
+    # ── Login page - clean, simple, responsive ──
     st.markdown("""
     <style>
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
         .login-hero {
             text-align: center;
-            padding: 4rem 2rem 2rem 2rem;
+            padding: 3rem 1rem 1.5rem 1rem;
         }
         .login-title {
-            font-size: 3rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-            background-size: 200% 200%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: gradientShift 4s ease infinite;
-            margin-bottom: 0.75rem;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #6366f1;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
         }
         .login-subtitle {
-            color: #64748b;
-            font-size: 1.2rem;
-            max-width: 480px;
-            margin: 0 auto 2rem auto;
-            line-height: 1.6;
+            color: #6b7280;
+            font-size: 1rem;
+            max-width: 320px;
+            margin: 0 auto 1.5rem auto;
+            line-height: 1.5;
         }
-        .login-features {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            flex-wrap: wrap;
-            margin: 2rem 0;
+        /* Touch-friendly buttons */
+        .stButton > button, .stLinkButton > a {
+            min-height: 48px !important;
+            font-size: 1rem !important;
         }
-        .login-feature {
-            text-align: center;
-            padding: 1rem;
+        /* Responsive adjustments */
+        @media (min-width: 481px) {
+            .login-hero {
+                padding: 4rem 2rem 2rem 2rem;
+            }
+            .login-title {
+                font-size: 2.5rem;
+            }
+            .login-subtitle {
+                font-size: 1.1rem;
+                max-width: 400px;
+            }
         }
-        .login-feature-icon {
-            font-size: 2rem;
-            margin-bottom: 0.5rem;
-        }
-        .login-feature-text {
-            color: #475569;
-            font-size: 0.9rem;
-            font-weight: 500;
+        @media (max-width: 480px) {
+            .login-hero {
+                padding: 2rem 0.75rem 1rem 0.75rem;
+            }
+            .login-title {
+                font-size: 1.75rem;
+            }
+            .login-subtitle {
+                font-size: 0.95rem;
+                max-width: 280px;
+            }
         }
     </style>
     <div class="login-hero">

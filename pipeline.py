@@ -1,11 +1,15 @@
 """
-Core pipeline engine (optimized for speed).
+Core pipeline engine (optimized for quality).
 
 Flow:
   1. Stage 0: Research gathering (Anthropic)
   2. Stage 1: 2 parallel drafts (Sonnet + GPT-4o)
   3. Judge: Pick best draft + note strengths from loser
-  4. Stages 2-3: Enhancement with critique before each stage
+  4. Stages 2-5: Four enhancement stages with critique before each:
+     - Stage 2: Deep Enhancement (artistic + academic depth)
+     - Stage 3: De-AI & Voice Authenticity (strip LLM patterns)
+     - Stage 4: Oral Delivery Optimization (breath, rhythm, flow)
+     - Stage 5: Final Polish (line-by-line refinement)
   5. Save opening paragraph for future differentiation
 
 Each enhancement stage receives: topic, research brief, critique feedback, previous output.
@@ -365,3 +369,81 @@ def run_full_pipeline(topic: str, length: str = "10 min"):
     _save_opening(current_text)
 
     yield ("Complete", "done", {"final_text": current_text})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LENS ANALYSIS (Sovereign Mind / Reflect Mode)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def run_lens_analysis(situation: str, selected_lenses: list[tuple[str, str]]) -> str:
+    """
+    Generate a text-based lens analysis (Quick Insight mode).
+
+    Args:
+        situation: The user's situation/dilemma to analyze
+        selected_lenses: List of (category_id, lens_id) tuples
+
+    Returns:
+        Structured analysis text
+    """
+    from lenses import (
+        LENS_ANALYSIS_SYSTEM,
+        LENS_ANALYSIS_USER_TEMPLATE,
+        get_lens_prompts,
+    )
+
+    lens_prompts = get_lens_prompts(selected_lenses)
+    user_content = LENS_ANALYSIS_USER_TEMPLATE.format(
+        situation=situation,
+        lens_prompts=lens_prompts,
+    )
+
+    return _call_llm_safe(
+        provider="anthropic",
+        system=LENS_ANALYSIS_SYSTEM,
+        user_content=user_content,
+        temperature=0.7,
+        model_override="claude-sonnet-4-20250514",
+    )
+
+
+def run_lens_audio_script(
+    situation: str,
+    selected_lenses: list[tuple[str, str]],
+    minutes: int = 5,
+) -> str:
+    """
+    Generate an audio script for Deep Reflection mode.
+
+    Args:
+        situation: The user's situation/dilemma
+        selected_lenses: List of (category_id, lens_id) tuples
+        minutes: Target audio length in minutes
+
+    Returns:
+        Audio script text ready for TTS
+    """
+    from lenses import (
+        LENS_AUDIO_SYSTEM,
+        LENS_AUDIO_USER_TEMPLATE,
+        get_lens_prompts,
+    )
+
+    # Approximately 150 words per minute for thoughtful narration
+    word_count = minutes * 150
+
+    lens_prompts = get_lens_prompts(selected_lenses)
+    user_content = LENS_AUDIO_USER_TEMPLATE.format(
+        situation=situation,
+        lens_prompts=lens_prompts,
+        word_count=word_count,
+        minutes=minutes,
+    )
+
+    return _call_llm_safe(
+        provider="anthropic",
+        system=LENS_AUDIO_SYSTEM,
+        user_content=user_content,
+        temperature=0.8,
+        model_override="claude-sonnet-4-20250514",
+    )
