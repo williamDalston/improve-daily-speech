@@ -5,11 +5,28 @@ Run with: streamlit run app.py
 
 import streamlit as st
 from auth import render_login_page, render_user_menu
-from database import save_speech, get_user_speeches, get_speech, delete_speech
+from database import (
+    save_speech, get_user_speeches, get_speech, delete_speech,
+    save_audio, get_audio,
+)
 from pipeline import run_full_pipeline
-from exporter import export_docx
+from exporter import export_docx, generate_audio
 
 st.set_page_config(page_title="Speech Writer Pipeline", layout="wide")
+
+# Available TTS voices
+VOICES = {
+    "Onyx": "onyx",       # deep, authoritative
+    "Nova": "nova",        # warm, female
+    "Alloy": "alloy",      # neutral, balanced
+    "Echo": "echo",        # male, clear
+    "Fable": "fable",      # expressive, British
+    "Shimmer": "shimmer",  # soft, female
+    "Ash": "ash",          # conversational male
+    "Coral": "coral",      # warm female
+    "Sage": "sage",        # calm, measured
+    "Ballad": "ballad",    # storyteller
+}
 
 
 # ============================================================
@@ -85,6 +102,52 @@ def _render_steps(steps, final_text, topic, key_prefix="main"):
             )
 
 
+def _render_audio_section(speech_id: int, user_id: int, final_text: str, key_prefix: str):
+    """Render audio generation and playback for a speech."""
+    st.divider()
+    st.subheader("Listen to Speech")
+
+    # Check if audio already exists
+    existing_audio = get_audio(speech_id, user_id)
+
+    if existing_audio:
+        st.audio(existing_audio, format="audio/mp3")
+        st.download_button(
+            "Download MP3",
+            data=existing_audio,
+            file_name="speech.mp3",
+            mime="audio/mpeg",
+            key=f"{key_prefix}_dl_mp3",
+        )
+        if st.button("Regenerate Audio", key=f"{key_prefix}_regen_audio"):
+            st.session_state[f"{key_prefix}_gen_audio"] = True
+            st.rerun()
+
+    if not existing_audio or st.session_state.get(f"{key_prefix}_gen_audio"):
+        voice_name = st.selectbox(
+            "Voice",
+            options=list(VOICES.keys()),
+            index=0,
+            key=f"{key_prefix}_voice",
+            help="Preview voices at platform.openai.com/docs/guides/text-to-speech",
+        )
+        voice_id = VOICES[voice_name]
+
+        if st.button(
+            "Generate Audio" if not existing_audio else "Generate with New Voice",
+            type="primary",
+            key=f"{key_prefix}_gen_btn",
+        ):
+            with st.spinner(f"Generating audio with '{voice_name}' voice... (this may take a minute for long speeches)"):
+                try:
+                    audio_bytes = generate_audio(final_text, voice=voice_id)
+                    save_audio(speech_id, user_id, audio_bytes, voice_id)
+                    st.session_state.pop(f"{key_prefix}_gen_audio", None)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Audio generation failed: {e}")
+
+
 # --- Authentication gate ---
 if not render_login_page():
     st.stop()
@@ -99,6 +162,7 @@ defaults = {
     "error": None,
     "steps": [],
     "final_text": None,
+    "last_speech_id": None,
     "view": "create",
     "viewing_speech": None,
 }
@@ -111,7 +175,6 @@ with st.sidebar:
     render_user_menu()
     st.divider()
 
-    # Navigation
     st.header("Navigation")
     if st.button("✍️ Create New Speech", use_container_width=True):
         st.session_state.view = "create"
@@ -142,7 +205,8 @@ with st.sidebar:
             "4. Critique → Artistic Enhancement\n"
             "5. Critique → Academic Depth\n"
             "6. Critique → Humanization\n"
-            "7. Critique → Final Polish"
+            "7. Critique → Final Polish\n"
+            "8. Text-to-Speech (OpenAI TTS)"
         )
 
 
@@ -153,7 +217,7 @@ if st.session_state.view == "create":
     st.title("Speech Writer Pipeline")
     st.caption(
         "Enter a topic → Research → 3 parallel drafts → Judge picks best → "
-        "4 enhancement stages with critiques → Final polished speech"
+        "4 enhancement stages with critiques → Final polished speech → Listen"
     )
 
     topic = st.text_area("What should the speech be about?", height=100,
@@ -165,6 +229,7 @@ if st.session_state.view == "create":
         st.session_state.topic = topic
         st.session_state.steps = []
         st.session_state.final_text = None
+        st.session_state.last_speech_id = None
         st.session_state.running = True
         st.session_state.error = None
 
@@ -202,7 +267,8 @@ if st.session_state.view == "create":
                 final_text=st.session_state.final_text,
                 stages=st.session_state.steps,
             )
-            st.toast(f"Speech saved automatically! (ID: {speech_id})")
+            st.session_state.last_speech_id = speech_id
+            st.toast(f"Speech saved automatically!")
 
         st.rerun()
 
@@ -212,6 +278,15 @@ if st.session_state.view == "create":
 
     _render_steps(st.session_state.steps, st.session_state.final_text,
                   st.session_state.topic, key_prefix="create")
+
+    # Audio section for just-created speech
+    if st.session_state.final_text and st.session_state.last_speech_id:
+        _render_audio_section(
+            speech_id=st.session_state.last_speech_id,
+            user_id=user["id"],
+            final_text=st.session_state.final_text,
+            key_prefix="create_audio",
+        )
 
 
 # ============================================================
@@ -230,6 +305,15 @@ elif st.session_state.view == "library":
                 st.session_state.viewing_speech = None
                 st.rerun()
 
+            # Audio player at the top for easy access
+            _render_audio_section(
+                speech_id=speech["id"],
+                user_id=user["id"],
+                final_text=speech["final_text"],
+                key_prefix=f"lib_audio_{speech['id']}",
+            )
+
+            # Show stages
             stages = speech.get("stages", [])
             if stages:
                 steps = [(s["name"], s["type"], s["data"]) for s in stages]

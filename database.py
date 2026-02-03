@@ -38,12 +38,23 @@ def init_db():
             final_text TEXT,
             stages_json TEXT,
             word_count INTEGER,
+            audio_data BLOB,
+            audio_voice TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
 
         CREATE INDEX IF NOT EXISTS idx_speeches_user ON speeches(user_id);
     """)
+    # Migration: add audio columns if they don't exist (for existing DBs)
+    try:
+        conn.execute("ALTER TABLE speeches ADD COLUMN audio_data BLOB")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE speeches ADD COLUMN audio_voice TEXT")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -119,6 +130,30 @@ def get_speech(speech_id: int, user_id: int) -> dict | None:
         result = dict(row)
         result["stages"] = json.loads(result["stages_json"]) if result["stages_json"] else []
         return result
+    return None
+
+
+def save_audio(speech_id: int, user_id: int, audio_data: bytes, voice: str):
+    """Save generated audio to an existing speech."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE speeches SET audio_data = ?, audio_voice = ? WHERE id = ? AND user_id = ?",
+        (audio_data, voice, speech_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_audio(speech_id: int, user_id: int) -> bytes | None:
+    """Get audio data for a speech. Returns None if no audio."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT audio_data FROM speeches WHERE id = ? AND user_id = ?",
+        (speech_id, user_id),
+    ).fetchone()
+    conn.close()
+    if row and row["audio_data"]:
+        return bytes(row["audio_data"])
     return None
 
 
