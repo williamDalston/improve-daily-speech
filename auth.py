@@ -20,6 +20,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Also try st.secrets for Streamlit Cloud
+try:
+    for key in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"):
+        if key not in os.environ and key in st.secrets:
+            os.environ[key] = st.secrets[key]
+except Exception:
+    pass
+
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
@@ -29,7 +37,6 @@ os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 def _get_redirect_uri() -> str:
     """Get the redirect URI based on current context."""
-    # In production, change this to your deployed URL
     return "http://localhost:8501"
 
 
@@ -77,7 +84,6 @@ def handle_callback(auth_code: str) -> dict | None:
         flow.fetch_token(code=auth_code)
         credentials = flow.credentials
 
-        # Verify the ID token and get user info
         user_info = id_token.verify_oauth2_token(
             credentials.id_token,
             google_requests.Request(),
@@ -104,9 +110,6 @@ def render_login_page():
     if "user" in st.session_state and st.session_state.user:
         return True
 
-    st.title("Speech Writer Pipeline")
-    st.markdown("---")
-
     # Check for OAuth callback
     query_params = st.query_params
     auth_code = query_params.get("code")
@@ -127,40 +130,40 @@ def render_login_page():
                 st.rerun()
         return False
 
-    # Show login options
+    # ── Login page ──
+    st.markdown("""
+    <div style="text-align: center; padding: 3rem 0 1rem 0;">
+        <h1 style="font-size: 2.5rem; margin-bottom: 0.25rem;">Speech Writer</h1>
+        <p style="color: #6c757d; font-size: 1.1rem; max-width: 500px; margin: 0 auto;">
+            Generate polished speeches on any topic using multi-stage AI refinement
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
     if not is_configured():
-        st.warning(
-            "Google OAuth not configured. Add GOOGLE_CLIENT_ID and "
-            "GOOGLE_CLIENT_SECRET to your .env file. "
-            "See auth.py for setup instructions."
-        )
-        # Dev mode: allow bypass login
-        st.markdown("### Dev Mode Login")
-        dev_name = st.text_input("Name", value="Developer")
-        dev_email = st.text_input("Email", value="dev@localhost")
-        if st.button("Login as Dev User"):
-            from database import get_or_create_user
-            user = get_or_create_user(
-                email=dev_email, name=dev_name, provider="dev"
-            )
-            st.session_state.user = user
-            st.rerun()
+        # Dev mode
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.caption("DEV MODE — OAuth not configured")
+            dev_name = st.text_input("Name", value="Developer")
+            dev_email = st.text_input("Email", value="dev@localhost")
+            if st.button("Sign In", type="primary", use_container_width=True):
+                from database import get_or_create_user
+                user = get_or_create_user(
+                    email=dev_email, name=dev_name, provider="dev"
+                )
+                st.session_state.user = user
+                st.rerun()
         return False
 
-    # Google login button
+    # Google login
+    st.markdown("")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown("### Sign in to get started")
-        st.markdown(
-            "Create speeches on any topic using our multi-stage AI pipeline. "
-            "Your speeches are saved to your account."
-        )
-        st.markdown("")
-
         login_url = get_login_url()
-        st.link_button("🔑 Sign in with Google", login_url, use_container_width=True)
-
-        st.caption("We only access your name and email for account creation.")
+        st.link_button("Sign in with Google", login_url, use_container_width=True)
+        st.caption("We only access your name and email.")
 
     return False
 
@@ -171,10 +174,10 @@ def render_user_menu():
         return
 
     user = st.session_state.user
-    st.sidebar.markdown(f"**{user['name']}**")
-    st.sidebar.caption(user["email"])
+    st.markdown(f"**{user['name']}**")
+    st.caption(user["email"])
 
-    if st.sidebar.button("Logout"):
+    if st.button("Sign Out", use_container_width=True):
         st.session_state.user = None
         st.session_state.steps = []
         st.session_state.final_text = None
