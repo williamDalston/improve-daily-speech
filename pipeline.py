@@ -34,6 +34,16 @@ from prompts import (
 
 load_dotenv()
 
+# On Streamlit Cloud, secrets are in st.secrets, not env vars.
+# Copy them into the environment so the SDK clients can find them.
+try:
+    import streamlit as st
+    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        if key not in os.environ and key in st.secrets:
+            os.environ[key] = st.secrets[key]
+except Exception:
+    pass
+
 anthropic_client = anthropic.Anthropic()
 openai_client = openai.OpenAI()
 

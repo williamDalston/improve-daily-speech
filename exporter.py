@@ -3,6 +3,7 @@ Export functions for .txt, .docx, and audio (OpenAI TTS).
 """
 
 import io
+import os
 
 import openai
 from docx import Document
@@ -10,6 +11,14 @@ from docx.shared import Pt
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# On Streamlit Cloud, secrets are in st.secrets, not env vars.
+try:
+    import streamlit as st
+    if "OPENAI_API_KEY" not in os.environ and "OPENAI_API_KEY" in st.secrets:
+        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+except Exception:
+    pass
 
 _openai_client = openai.OpenAI()
 
