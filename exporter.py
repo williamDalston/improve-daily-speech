@@ -7,6 +7,7 @@ import os
 
 import openai
 from docx import Document
+from pydub import AudioSegment
 from docx.shared import Pt
 from dotenv import load_dotenv
 
@@ -51,7 +52,8 @@ def generate_audio(text: str, voice: str = "onyx", speed: float = 1.0) -> bytes:
     Generate documentary-style audio from text using OpenAI TTS.
 
     OpenAI TTS has a 4096 character limit per request, so we split
-    long texts into chunks and concatenate the audio.
+    long texts into chunks and properly merge the audio using pydub
+    to avoid glitches at chunk boundaries.
 
     Voices: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer
     Speed: 0.25 to 4.0 (1.0 = normal)
@@ -59,8 +61,9 @@ def generate_audio(text: str, voice: str = "onyx", speed: float = 1.0) -> bytes:
     Returns MP3 bytes.
     """
     chunks = _split_for_tts(text, max_chars=4000)
-    audio_parts = []
 
+    # Generate audio for each chunk
+    audio_segments = []
     for chunk in chunks:
         response = _get_openai_client().audio.speech.create(
             model="tts-1-hd",
@@ -69,9 +72,24 @@ def generate_audio(text: str, voice: str = "onyx", speed: float = 1.0) -> bytes:
             speed=speed,
             response_format="mp3",
         )
-        audio_parts.append(response.content)
+        # Load MP3 bytes into pydub AudioSegment
+        segment = AudioSegment.from_mp3(io.BytesIO(response.content))
+        audio_segments.append(segment)
 
-    return b"".join(audio_parts)
+    # Merge segments with small crossfade to avoid glitches
+    if len(audio_segments) == 1:
+        combined = audio_segments[0]
+    else:
+        combined = audio_segments[0]
+        for segment in audio_segments[1:]:
+            # 50ms crossfade for seamless joins
+            combined = combined.append(segment, crossfade=50)
+
+    # Export as MP3
+    buffer = io.BytesIO()
+    combined.export(buffer, format="mp3", bitrate="192k")
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def _split_for_tts(text: str, max_chars: int = 4000) -> list[str]:
