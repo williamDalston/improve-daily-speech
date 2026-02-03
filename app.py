@@ -102,45 +102,90 @@ def _render_steps(steps, final_text, topic, key_prefix="main"):
             )
 
 
+def _render_audio_player(audio_bytes: bytes, key_prefix: str):
+    """Render custom HTML5 audio player with playback speed control."""
+    import base64
+    b64 = base64.b64encode(audio_bytes).decode()
+    player_id = f"player_{key_prefix}"
+    speed_id = f"speed_{key_prefix}"
+    label_id = f"label_{key_prefix}"
+
+    html = f"""
+    <div style="background: #1e1e2e; border-radius: 12px; padding: 20px; margin: 10px 0;">
+        <audio id="{player_id}" style="width: 100%; margin-bottom: 12px;"
+               controls controlslist="nodownload">
+            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+        </audio>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="color: #cdd6f4; font-size: 14px; min-width: 50px;">Speed:</span>
+            <input type="range" id="{speed_id}" min="0.5" max="2.0" step="0.05" value="1.0"
+                   style="flex: 1; accent-color: #89b4fa; cursor: pointer;"
+                   oninput="
+                       document.getElementById('{player_id}').playbackRate = this.value;
+                       document.getElementById('{label_id}').textContent = this.value + 'x';
+                   ">
+            <span id="{label_id}" style="color: #89b4fa; font-weight: bold; font-size: 14px; min-width: 40px;">1.0x</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; color: #6c7086; font-size: 11px; margin-top: 4px; padding: 0 62px;">
+            <span>0.5x</span><span>1.0x</span><span>1.5x</span><span>2.0x</span>
+        </div>
+    </div>
+    """
+    st.components.v1.html(html, height=160)
+
+
 def _render_audio_section(speech_id: int, user_id: int, final_text: str, key_prefix: str):
     """Render audio generation and playback for a speech."""
     st.divider()
     st.subheader("Listen to Speech")
 
-    # Check if audio already exists
     existing_audio = get_audio(speech_id, user_id)
 
     if existing_audio:
-        st.audio(existing_audio, format="audio/mp3")
-        st.download_button(
-            "Download MP3",
-            data=existing_audio,
-            file_name="speech.mp3",
-            mime="audio/mpeg",
-            key=f"{key_prefix}_dl_mp3",
-        )
-        if st.button("Regenerate Audio", key=f"{key_prefix}_regen_audio"):
-            st.session_state[f"{key_prefix}_gen_audio"] = True
-            st.rerun()
+        _render_audio_player(existing_audio, key_prefix)
+
+        col_dl, col_regen = st.columns([1, 1])
+        with col_dl:
+            st.download_button(
+                "Download MP3",
+                data=existing_audio,
+                file_name="speech.mp3",
+                mime="audio/mpeg",
+                key=f"{key_prefix}_dl_mp3",
+            )
+        with col_regen:
+            if st.button("Regenerate Audio", key=f"{key_prefix}_regen_audio"):
+                st.session_state[f"{key_prefix}_gen_audio"] = True
+                st.rerun()
 
     if not existing_audio or st.session_state.get(f"{key_prefix}_gen_audio"):
-        voice_name = st.selectbox(
-            "Voice",
-            options=list(VOICES.keys()),
-            index=0,
-            key=f"{key_prefix}_voice",
-            help="Preview voices at platform.openai.com/docs/guides/text-to-speech",
-        )
+        col_voice, col_speed = st.columns(2)
+        with col_voice:
+            voice_name = st.selectbox(
+                "Voice",
+                options=list(VOICES.keys()),
+                index=0,
+                key=f"{key_prefix}_voice",
+                help="Preview voices at platform.openai.com/docs/guides/text-to-speech",
+            )
+        with col_speed:
+            gen_speed = st.slider(
+                "Generation Speed",
+                min_value=0.75, max_value=1.5, value=1.0, step=0.05,
+                key=f"{key_prefix}_gen_speed",
+                help="Baked-in speech pace. Use the player slider for real-time speed changes.",
+            )
+
         voice_id = VOICES[voice_name]
 
         if st.button(
-            "Generate Audio" if not existing_audio else "Generate with New Voice",
+            "Generate Audio" if not existing_audio else "Generate with New Settings",
             type="primary",
             key=f"{key_prefix}_gen_btn",
         ):
-            with st.spinner(f"Generating audio with '{voice_name}' voice... (this may take a minute for long speeches)"):
+            with st.spinner(f"Generating audio with '{voice_name}' voice at {gen_speed}x..."):
                 try:
-                    audio_bytes = generate_audio(final_text, voice=voice_id)
+                    audio_bytes = generate_audio(final_text, voice=voice_id, speed=gen_speed)
                     save_audio(speech_id, user_id, audio_bytes, voice_id)
                     st.session_state.pop(f"{key_prefix}_gen_audio", None)
                     st.rerun()

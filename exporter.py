@@ -36,7 +36,7 @@ def export_docx(text: str, title: str) -> bytes:
     return buffer.getvalue()
 
 
-def generate_audio(text: str, voice: str = "onyx") -> bytes:
+def generate_audio(text: str, voice: str = "onyx", speed: float = 1.0) -> bytes:
     """
     Generate speech audio from text using OpenAI TTS.
 
@@ -44,11 +44,10 @@ def generate_audio(text: str, voice: str = "onyx") -> bytes:
     long texts into chunks and concatenate the audio.
 
     Voices: alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer
-    'onyx' is a deep, authoritative male voice — good for speeches.
+    Speed: 0.25 to 4.0 (1.0 = normal)
 
     Returns MP3 bytes.
     """
-    # Split text into chunks under 4096 chars, breaking at paragraph boundaries
     chunks = _split_for_tts(text, max_chars=4000)
     audio_parts = []
 
@@ -57,11 +56,11 @@ def generate_audio(text: str, voice: str = "onyx") -> bytes:
             model="tts-1-hd",
             voice=voice,
             input=chunk,
+            speed=speed,
             response_format="mp3",
         )
         audio_parts.append(response.content)
 
-    # Concatenate MP3 chunks (MP3 is concatenation-safe)
     return b"".join(audio_parts)
 
 

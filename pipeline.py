@@ -38,8 +38,8 @@ anthropic_client = anthropic.Anthropic()
 openai_client = openai.OpenAI()
 
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
-DEFAULT_OPENAI_MODEL = "gpt-4o"
-MAX_TOKENS = 8192
+DEFAULT_OPENAI_MODEL = "gpt-4o-2024-11-20"
+MAX_TOKENS = 16384
 
 # File to store previous speech openings for differentiation
 HISTORY_FILE = Path(__file__).parent / "speech_history.json"

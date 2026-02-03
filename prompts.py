@@ -46,7 +46,7 @@ RESEARCH_STAGE = {
     ),
     "temperature": 0.4,
     "provider": "anthropic",
-    "model_override": None,
+    "model_override": "claude-opus-4-0-20250514",
 }
 
 # --- Stage 1: Initial Script (run 3x in parallel, best selected by judge) ---
@@ -256,7 +256,7 @@ JUDGE_PROMPT = {
     ),
     "temperature": 0.2,
     "provider": "anthropic",
-    "model_override": None,
+    "model_override": "claude-opus-4-0-20250514",
 }
 
 # --- Critique prompt template (used between stages) ---
@@ -355,7 +355,7 @@ ENHANCEMENT_STAGES = [
         ),
         "temperature": 0.7,
         "provider": "anthropic",
-        "model_override": None,
+        "model_override": "claude-opus-4-0-20250514",
     },
     {
         "name": "Stage 3: Academic Depth",
