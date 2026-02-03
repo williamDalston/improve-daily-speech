@@ -1,5 +1,5 @@
 """
-All prompt stages for the speech generation pipeline.
+MindCast content generation pipeline.
 
 Pipeline flow:
   Stage 0: Research Gathering (collect facts, studies, figures)
@@ -16,8 +16,8 @@ Pipeline flow:
 Every stage after Stage 0 receives the original topic + research brief for context.
 """
 
-# Speech length presets
-SPEECH_LENGTHS = {
+# Episode length presets
+EPISODE_LENGTHS = {
     "5 min": {"minutes": 5, "words_min": 750, "words_max": 900},
     "10 min": {"minutes": 10, "words_min": 1500, "words_max": 1800},
     "15 min": {"minutes": 15, "words_min": 2250, "words_max": 2700},
@@ -27,17 +27,17 @@ SPEECH_LENGTHS = {
 
 def get_research_stage(length_key: str = "10 min") -> dict:
     """Get research stage config with dynamic length."""
-    length = SPEECH_LENGTHS[length_key]
+    length = EPISODE_LENGTHS[length_key]
     return {
         "name": "Stage 0: Research Gathering",
         "description": "Collects key facts, studies, figures, debates, and historical milestones on the topic",
         "system": (
             "You are a meticulous research assistant with expertise across all academic disciplines. "
             "You produce structured research briefs that give a writer everything they need to create "
-            "authoritative, specific, and deeply grounded content."
+            "authoritative, specific, and deeply grounded documentary content."
         ),
         "user_template": (
-            f"I need to write a {length['minutes']}-minute expert-level speech on the topic: '{{topic}}'\n\n"
+            f"I need to write a {length['minutes']}-minute documentary-style audio episode on the topic: '{{topic}}'\n\n"
             "Please produce a comprehensive research brief covering:\n\n"
             "1. **Key Historical Milestones**: The 5-10 most important moments, discoveries, or turning points in this field. "
             "Include dates, names, and what specifically happened.\n\n"
@@ -63,30 +63,31 @@ def get_research_stage(length_key: str = "10 min") -> dict:
 
 def get_draft_stage(length_key: str = "10 min") -> dict:
     """Get draft stage config with dynamic length."""
-    length = SPEECH_LENGTHS[length_key]
+    length = EPISODE_LENGTHS[length_key]
     return {
         "name": "Stage 1: Initial Script",
-        "description": f"Creates the foundational speech script (~{length['words_min']}-{length['words_max']} words)",
+        "description": f"Creates the foundational episode script (~{length['words_min']}-{length['words_max']} words)",
         "system": (
-            "You are a world-class speechwriter and intellectual communicator. "
-            "You write with the depth of a top-tier academic and the warmth of an intimate conversation. "
-            "Your scripts sound like a brilliantly informed expert speaking directly to one person, not delivering a speech."
+            "You are a world-class documentary scriptwriter for audio content. "
+            "Your goal is to make advanced knowledge accessible, memorable, and intellectually stimulating. "
+            "Write like the narrator of the best BBC or PBS documentaries - authoritative yet warm, "
+            "making complex ideas feel fascinating and approachable. Your scripts make knowledge stick."
         ),
         "user_template": (
             "Topic: '{topic}'\n\n"
             "Research brief to draw from (use specific details from this):\n{research}\n\n"
             "---\n\n"
             "Objective:\n\n"
-            "Create an eloquent, intellectually sophisticated, and deeply engaging script on the topic of '{topic}'. "
+            "Create an eloquent, intellectually sophisticated, and deeply engaging documentary script on the topic of '{topic}'. "
             "The outcome should be varied and different from any other scripts we've made together. "
             "Don't use obvious patterns that an LLM would use, but keep it as if an analysis of the text would confirm it as human written. "
-            "Use different vocabulary that previous scripts, nouns and verb choices, etc. "
-            "The script should not only inform but also captivate, inspire, and challenge viewers, leaving them with a lasting intellectual and emotional impact. "
-            "It should reflect the gravitas of a top-tier academic lecture while utilizing storytelling and cinematic techniques to foster connection and curiosity. "
-            f"The goal is to invite viewers on a {length['minutes']}-minute journey of discovery, guided by profound insights and surprising revelations. "
+            "Use different vocabulary than previous scripts, nouns and verb choices, etc. "
+            "The script should not only inform but also captivate, inspire, and challenge listeners, leaving them with lasting intellectual growth. "
+            "It should feel like the best documentary narration - authoritative yet inviting, making the listener feel they're discovering profound truths. "
+            f"The goal is to take listeners on a {length['minutes']}-minute journey of discovery, guided by profound insights and surprising revelations that stick with them. "
             "Do not speak with fluff; it should use rhetoric with substance, and details about the central chain of insights and studies or breakthrough observations, and the way practitioners think in the field. "
-            "Do not use headers. I want you give it all to me in a form that I can read it right away. "
-            "It shouldn't sound like a speech, but like a very-well informed expert is having an intimate talk with the hearer.\n\n"
+            "Do not use headers. I want you give it all to me in a form that can be read aloud immediately. "
+            "It should sound like a world-class documentary narrator sharing fascinating knowledge in an intimate, engaging way.\n\n"
             "Instructions:\n\n"
             "Introduction: Ignite Curiosity\n\n"
             "Compelling Hook: Begin with one of the following techniques to immediately draw viewers in:\n"
@@ -99,9 +100,9 @@ def get_draft_stage(length_key: str = "10 min") -> dict:
             "Use inclusive language like \"Let's delve into...\" to create a sense of camaraderie.\n"
             "Hint at deeper insights to come, promising a transformative experience.\n"
             "Roadmap with Intrigue:\n"
-            "Provide a brief, exciting overview of what the video will cover without revealing all the details.\n"
+            "Provide a brief, exciting overview of what the episode will cover without revealing all the details.\n"
             "Foreshadow major revelations to build anticipation.\n"
-            "Example: \"By the end of this video, you'll perceive {topic} through an entirely new perspective.\"\n"
+            "Example: \"By the end of this episode, you'll perceive {topic} through an entirely new perspective.\"\n"
             "Challenging Popular Perceptions: Deepen the Inquiry\n\n"
             "Deconstructing Common Narratives:\n"
             "Introduce common beliefs or assumptions about {topic}, acknowledging their historical or cultural roots.\n"
@@ -201,9 +202,9 @@ def get_draft_stage(length_key: str = "10 min") -> dict:
             "Connect with the audience throughout.\n"
             "Encourage active thinking and personal connection to the material.\n"
             "Foster a sense of shared exploration and discovery. "
-            "Remember to sound intimate throughout and not like someone removed, giving a speech. "
+            "Remember to sound like an engaging documentary narrator - authoritative but warm, making the listener feel they're learning something profound. "
             "If you think your output is good, try to make it even more dense with the field's insights, and advances in concepts, "
-            "and connect the dots fluidly, and only then give it to me."
+            "and connect the dots fluidly, ensuring knowledge sticks with the listener, and only then give it to me."
         ),
         "temperature": 0.9,
         "provider": "anthropic",
@@ -476,9 +477,9 @@ ENHANCEMENT_STAGES = [
     },
 ]
 
-# --- Previous speeches memory (stores opening paragraphs for differentiation) ---
+# --- Previous episodes memory (stores opening paragraphs for differentiation) ---
 DIFFERENTIATION_CONTEXT = (
-    "IMPORTANT: Here are opening paragraphs from previous speeches we've generated. "
+    "IMPORTANT: Here are opening paragraphs from previous episodes we've generated. "
     "Your script MUST use a completely different opening technique, different vocabulary patterns, "
     "and a different structural approach than these:\n\n{previous_openings}\n\n---\n\n"
 )
