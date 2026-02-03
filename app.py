@@ -86,6 +86,9 @@ VOICES = {
     "Ballad (storyteller)": "ballad",
 }
 
+# Speech length options
+SPEECH_LENGTHS = ["5 min", "10 min", "15 min", "20 min"]
+
 PIPELINE_LABELS = [
     "Research", "Drafts", "Judge",
     "Critique 1", "Enhancement 1",
@@ -252,6 +255,7 @@ user = st.session_state.user
 # ── Session state ───────────────────────────────────────────
 defaults = {
     "topic": "",
+    "length": "10 min",
     "running": False,
     "error": None,
     "steps": [],
@@ -304,6 +308,16 @@ if st.session_state.view == "create":
         label_visibility="collapsed",
     )
 
+    # Speech length selector
+    col_length, col_spacer = st.columns([1, 2])
+    with col_length:
+        length = st.selectbox(
+            "Speech Length",
+            options=SPEECH_LENGTHS,
+            index=1,  # Default to 10 min
+            help="Approximate speaking time at normal pace",
+        )
+
     generate = st.button(
         "Generate Speech",
         type="primary",
@@ -313,6 +327,7 @@ if st.session_state.view == "create":
 
     if generate and topic.strip():
         st.session_state.topic = topic.strip()
+        st.session_state.length = length
         st.session_state.steps = []
         st.session_state.final_text = None
         st.session_state.last_speech_id = None
@@ -326,7 +341,7 @@ if st.session_state.view == "create":
         step_count = 0
 
         try:
-            for step_name, step_type, data in run_full_pipeline(st.session_state.topic):
+            for step_name, step_type, data in run_full_pipeline(st.session_state.topic, length):
                 if data.get("status") == "done" or step_type == "done":
                     step_count += 1
                     st.session_state.steps.append((step_name, step_type, data))

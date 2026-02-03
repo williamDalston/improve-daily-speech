@@ -16,186 +16,202 @@ Pipeline flow:
 Every stage after Stage 0 receives the original topic + research brief for context.
 """
 
-# --- Stage 0: Research Gathering ---
-RESEARCH_STAGE = {
-    "name": "Stage 0: Research Gathering",
-    "description": "Collects key facts, studies, figures, debates, and historical milestones on the topic",
-    "system": (
-        "You are a meticulous research assistant with expertise across all academic disciplines. "
-        "You produce structured research briefs that give a writer everything they need to create "
-        "authoritative, specific, and deeply grounded content."
-    ),
-    "user_template": (
-        "I need to write a 10-minute expert-level speech on the topic: '{topic}'\n\n"
-        "Please produce a comprehensive research brief covering:\n\n"
-        "1. **Key Historical Milestones**: The 5-10 most important moments, discoveries, or turning points in this field. "
-        "Include dates, names, and what specifically happened.\n\n"
-        "2. **Foundational Theories & Frameworks**: The major theoretical models that ground the field. "
-        "Who developed them, when, and what do they explain?\n\n"
-        "3. **Landmark Studies & Experiments**: Specific experiments or studies that changed understanding. "
-        "Include methodology, key findings, and sample sizes where relevant.\n\n"
-        "4. **Surprising Statistics & Counterintuitive Facts**: Data points that would shock or intrigue a general audience.\n\n"
-        "5. **Key Figures & Their Contributions**: The people behind the breakthroughs — not just names, but what they specifically did and said.\n\n"
-        "6. **Current Debates & Open Questions**: Where does the field disagree? What remains unresolved?\n\n"
-        "7. **Recent Advances (last 5 years)**: The cutting edge — what's new and exciting?\n\n"
-        "8. **Cross-Disciplinary Connections**: How does this topic connect to other fields in unexpected ways?\n\n"
-        "9. **Memorable Quotes**: Powerful quotes from practitioners or thinkers in the field.\n\n"
-        "10. **Common Misconceptions**: What does the public get wrong about this topic?\n\n"
-        "Be specific. Use names, dates, numbers. No vague generalities. "
-        "Format as organized bullet points under each heading."
-    ),
-    "temperature": 0.4,
-    "provider": "anthropic",
-    "model_override": "claude-opus-4-0-20250514",
+# Speech length presets
+SPEECH_LENGTHS = {
+    "5 min": {"minutes": 5, "words_min": 750, "words_max": 900},
+    "10 min": {"minutes": 10, "words_min": 1500, "words_max": 1800},
+    "15 min": {"minutes": 15, "words_min": 2250, "words_max": 2700},
+    "20 min": {"minutes": 20, "words_min": 3000, "words_max": 3600},
 }
 
-# --- Stage 1: Initial Script (run 3x in parallel, best selected by judge) ---
-DRAFT_STAGE = {
-    "name": "Stage 1: Initial Script",
-    "description": "Creates the foundational speech script (~1500-1800 words)",
-    "system": (
-        "You are a world-class speechwriter and intellectual communicator. "
-        "You write with the depth of a top-tier academic and the warmth of an intimate conversation. "
-        "Your scripts sound like a brilliantly informed expert speaking directly to one person, not delivering a speech."
-    ),
-    "user_template": (
-        "Topic: '{topic}'\n\n"
-        "Research brief to draw from (use specific details from this):\n{research}\n\n"
-        "---\n\n"
-        "Objective:\n\n"
-        "Create an eloquent, intellectually sophisticated, and deeply engaging script on the topic of '{topic}'. "
-        "The outcome should be varied and different from any other scripts we've made together. "
-        "Don't use obvious patterns that an LLM would use, but keep it as if an analysis of the text would confirm it as human written. "
-        "Use different vocabulary that previous scripts, nouns and verb choices, etc. "
-        "The script should not only inform but also captivate, inspire, and challenge viewers, leaving them with a lasting intellectual and emotional impact. "
-        "It should reflect the gravitas of a top-tier academic lecture while utilizing storytelling and cinematic techniques to foster connection and curiosity. "
-        "The goal is to invite viewers on a 10-minute journey of discovery, guided by profound insights and surprising revelations. "
-        "Do not speak with fluff; it should use rhetoric with substance, and details about the central chain of insights and studies or breakthrough observations, and the way practitioners think in the field. "
-        "Do not use headers. I want you give it all to me in a form that I can read it right away. "
-        "It shouldn't sound like a speech, but like a very-well informed expert is having an intimate talk with the hearer.\n\n"
-        "Instructions:\n\n"
-        "Introduction: Ignite Curiosity\n\n"
-        "Compelling Hook: Begin with one of the following techniques to immediately draw viewers in:\n"
-        "Provocative Quote: Present a powerful, relevant quote tied to a modern issue or perspective, making it feel both timeless and current.\n"
-        "Existential Question: Pose a deeply thought-provoking question that challenges viewers' core beliefs and provokes introspection.\n"
-        "Counterintuitive Statistic: Share a surprising, lesser-known fact or statistic that subverts expectations and piques curiosity.\n"
-        "Personal Narrative: Offer a brief but compelling story that relates the topic to the viewer's own life or experiences.\n"
-        "Viewer Connection:\n"
-        "Address the audience directly, acknowledging their curiosity and existing knowledge.\n"
-        "Use inclusive language like \"Let's delve into...\" to create a sense of camaraderie.\n"
-        "Hint at deeper insights to come, promising a transformative experience.\n"
-        "Roadmap with Intrigue:\n"
-        "Provide a brief, exciting overview of what the video will cover without revealing all the details.\n"
-        "Foreshadow major revelations to build anticipation.\n"
-        "Example: \"By the end of this video, you'll perceive {topic} through an entirely new perspective.\"\n"
-        "Challenging Popular Perceptions: Deepen the Inquiry\n\n"
-        "Deconstructing Common Narratives:\n"
-        "Introduce common beliefs or assumptions about {topic}, acknowledging their historical or cultural roots.\n"
-        "Respectfully and rigorously dismantle misconceptions, presenting clear, evidence-based clarifications.\n"
-        "Emphasize that revising one's understanding is a sign of intellectual growth.\n"
-        "Rhetorical Engagement:\n"
-        "Pose open-ended questions that encourage viewers to reflect critically.\n"
-        "Use strategic pauses to give viewers time to ponder before unveiling deeper insights.\n"
-        "Example: \"Why do we hold onto the belief that [common misconception]? Let's examine the evidence.\"\n"
-        "Deep Exploration: Balance Rigor and Accessibility\n\n"
-        "Thematic Coherence:\n"
-        "Establish a central thesis or guiding question that anchors the exploration.\n"
-        "Revisit this theme throughout to maintain focus and build intellectual momentum.\n"
-        "Sophisticated Yet Clear Communication:\n"
-        "Break down complex concepts using relatable metaphors and analogies.\n"
-        "Introduce technical terms with clear explanations and context.\n"
-        "Use vivid language to help viewers visualize abstract ideas.\n"
-        "Interdisciplinary Synthesis:\n"
-        "Highlight connections between '{topic}' and other fields or areas of life.\n"
-        "Show unexpected links between seemingly disparate disciplines.\n"
-        "Example: \"This concept in '{topic}' mirrors patterns we see in economics and even music.\"\n"
-        "Cutting-Edge & Open Questions:\n"
-        "Present the latest research and developments with enthusiasm.\n"
-        "Frame unanswered questions as opportunities for further exploration.\n"
-        "Encourage viewers to think critically about ongoing debates.\n"
-        "Astounding Insights: Inspire Awe\n\n"
-        "Revelations with Impact:\n"
-        "Speak about the historical origins and move forward with the intellectual or professional insights. "
-        "Gradually build up to key insights, creating a sense of discovery.\n"
-        "Reveal impactful information strategically for maximum effect.\n"
-        "Humanizing Complex Ideas:\n"
-        "Share stories about the people behind major breakthroughs.\n"
-        "Connect historical journeys to the viewer's own learning process.\n"
-        "Vivid Conceptualization:\n"
-        "Use descriptive, sensory language to bring abstract concepts to life.\n"
-        "Employ thought experiments to help viewers \"experience\" complex ideas.\n"
-        "Develop metaphors that evolve and deepen as the video progresses.\n"
-        "Sustained Engagement: Craft a Captivating Journey\n\n"
-        "Narrative Arc:\n"
-        "Structure the content like a story, with each revelation leading to new questions.\n"
-        "Create intellectual tension and release to keep viewers hooked.\n"
-        "Use cliffhangers to maintain interest.\n"
-        "Active Participation:\n"
-        "Pose challenges or thought experiments directly to the viewer.\n"
-        "Encourage them to apply new knowledge to real-world situations.\n"
-        "Include moments for self-reflection.\n"
-        "Example: \"How might this new understanding change your approach to [everyday activity]?\"\n"
-        "Emotional & Intellectual Resonance:\n"
-        "Tap into the awe-inspiring nature of the topic.\n"
-        "Acknowledge the emotional impact of paradigm shifts.\n"
-        "Create moments of intellectual satisfaction as complex ideas come together.\n"
-        "Conclusion: Leave a Lasting Impression\n\n"
-        "Synthesis of Ideas:\n"
-        "Briefly recap the main points and tie them together thoughtfully.\n"
-        "Revisit the opening theme, highlighting the intellectual journey undertaken.\n"
-        "The Road Ahead:\n"
-        "Pose a final question that encourages further thought.\n"
-        "Suggest potential future developments or areas for exploration.\n"
-        "Community Engagement:\n"
-        "Invite viewers to discuss the topic in the comments.\n"
-        "Suggest a specific question or topic for them to consider.\n"
-        "Inspirational Close:\n"
-        "Connect the intellectual journey to personal growth and societal progress.\n"
-        "End with a call to action, encouraging continued curiosity and learning.\n"
-        "Additional Techniques for Maximum Impact\n\n"
-        "Cinematic Language:\n"
-        "Use visual descriptors to create vivid mental scenes.\n"
-        "Craft metaphors and analogies that evolve as the narrative progresses.\n"
-        "Example: \"Imagine zooming into the very fabric of reality...\"\n"
-        "Varied Cognitive Pacing:\n"
-        "Alternate between fast-paced information and slower, reflective moments.\n"
-        "Use linguistic devices like alliteration or repetition for emphasis.\n"
-        "Vary sentence length to maintain a dynamic rhythm.\n"
-        "Intellectual Plot Twists:\n"
-        "Introduce unexpected perspectives or contradictions.\n"
-        "Create cognitive dissonance, then resolve it for intellectual satisfaction.\n"
-        "Futuristic Speculation:\n"
-        "Encourage viewers to imagine potential future scenarios related to {topic}.\n"
-        "Frame these speculations as part of an ongoing, exciting intellectual journey.\n"
-        "Meta-Commentary on Learning:\n"
-        "Reflect on the learning process itself.\n"
-        "Validate the challenge of grappling with complex ideas, fostering a growth mindset.\n"
-        "Guidelines for Length and Timing\n\n"
-        "Target Duration:\n"
-        "Aim for a script that fits within a 10-minute video format (approximately 1,500 to 1,800 words).\n"
-        "Adjust the depth and detail to suit this timeframe without sacrificing clarity or engagement.\n"
-        "Concise Thoroughness:\n"
-        "Ensure each section is thorough yet concise.\n"
-        "Maintain a logical progression without unnecessary digressions.\n"
-        "Final Notes:\n\n"
-        "Tone and Style:\n"
-        "Maintain an authoritative yet inviting tone.\n"
-        "Balance intellectual rigor with emotional resonance.\n"
-        "Avoid jargon unless it's clearly explained and adds value.\n"
-        "Audience Engagement:\n"
-        "Connect with the audience throughout.\n"
-        "Encourage active thinking and personal connection to the material.\n"
-        "Foster a sense of shared exploration and discovery. "
-        "Remember to sound intimate throughout and not like someone removed, giving a speech. "
-        "If you think your output is good, try to make it even more dense with the field's insights, and advances in concepts, "
-        "and connect the dots fluidly, and only then give it to me."
-    ),
-    "temperature": 0.9,
-    "provider": "anthropic",
-    "model_override": "claude-opus-4-0-20250514",
-}
 
-# --- Draft variants for parallel generation ---
+def get_research_stage(length_key: str = "10 min") -> dict:
+    """Get research stage config with dynamic length."""
+    length = SPEECH_LENGTHS[length_key]
+    return {
+        "name": "Stage 0: Research Gathering",
+        "description": "Collects key facts, studies, figures, debates, and historical milestones on the topic",
+        "system": (
+            "You are a meticulous research assistant with expertise across all academic disciplines. "
+            "You produce structured research briefs that give a writer everything they need to create "
+            "authoritative, specific, and deeply grounded content."
+        ),
+        "user_template": (
+            f"I need to write a {length['minutes']}-minute expert-level speech on the topic: '{{topic}}'\n\n"
+            "Please produce a comprehensive research brief covering:\n\n"
+            "1. **Key Historical Milestones**: The 5-10 most important moments, discoveries, or turning points in this field. "
+            "Include dates, names, and what specifically happened.\n\n"
+            "2. **Foundational Theories & Frameworks**: The major theoretical models that ground the field. "
+            "Who developed them, when, and what do they explain?\n\n"
+            "3. **Landmark Studies & Experiments**: Specific experiments or studies that changed understanding. "
+            "Include methodology, key findings, and sample sizes where relevant.\n\n"
+            "4. **Surprising Statistics & Counterintuitive Facts**: Data points that would shock or intrigue a general audience.\n\n"
+            "5. **Key Figures & Their Contributions**: The people behind the breakthroughs — not just names, but what they specifically did and said.\n\n"
+            "6. **Current Debates & Open Questions**: Where does the field disagree? What remains unresolved?\n\n"
+            "7. **Recent Advances (last 5 years)**: The cutting edge — what's new and exciting?\n\n"
+            "8. **Cross-Disciplinary Connections**: How does this topic connect to other fields in unexpected ways?\n\n"
+            "9. **Memorable Quotes**: Powerful quotes from practitioners or thinkers in the field.\n\n"
+            "10. **Common Misconceptions**: What does the public get wrong about this topic?\n\n"
+            "Be specific. Use names, dates, numbers. No vague generalities. "
+            "Format as organized bullet points under each heading."
+        ),
+        "temperature": 0.4,
+        "provider": "anthropic",
+        "model_override": "claude-opus-4-0-20250514",
+    }
+
+
+def get_draft_stage(length_key: str = "10 min") -> dict:
+    """Get draft stage config with dynamic length."""
+    length = SPEECH_LENGTHS[length_key]
+    return {
+        "name": "Stage 1: Initial Script",
+        "description": f"Creates the foundational speech script (~{length['words_min']}-{length['words_max']} words)",
+        "system": (
+            "You are a world-class speechwriter and intellectual communicator. "
+            "You write with the depth of a top-tier academic and the warmth of an intimate conversation. "
+            "Your scripts sound like a brilliantly informed expert speaking directly to one person, not delivering a speech."
+        ),
+        "user_template": (
+            "Topic: '{topic}'\n\n"
+            "Research brief to draw from (use specific details from this):\n{research}\n\n"
+            "---\n\n"
+            "Objective:\n\n"
+            "Create an eloquent, intellectually sophisticated, and deeply engaging script on the topic of '{topic}'. "
+            "The outcome should be varied and different from any other scripts we've made together. "
+            "Don't use obvious patterns that an LLM would use, but keep it as if an analysis of the text would confirm it as human written. "
+            "Use different vocabulary that previous scripts, nouns and verb choices, etc. "
+            "The script should not only inform but also captivate, inspire, and challenge viewers, leaving them with a lasting intellectual and emotional impact. "
+            "It should reflect the gravitas of a top-tier academic lecture while utilizing storytelling and cinematic techniques to foster connection and curiosity. "
+            f"The goal is to invite viewers on a {length['minutes']}-minute journey of discovery, guided by profound insights and surprising revelations. "
+            "Do not speak with fluff; it should use rhetoric with substance, and details about the central chain of insights and studies or breakthrough observations, and the way practitioners think in the field. "
+            "Do not use headers. I want you give it all to me in a form that I can read it right away. "
+            "It shouldn't sound like a speech, but like a very-well informed expert is having an intimate talk with the hearer.\n\n"
+            "Instructions:\n\n"
+            "Introduction: Ignite Curiosity\n\n"
+            "Compelling Hook: Begin with one of the following techniques to immediately draw viewers in:\n"
+            "Provocative Quote: Present a powerful, relevant quote tied to a modern issue or perspective, making it feel both timeless and current.\n"
+            "Existential Question: Pose a deeply thought-provoking question that challenges viewers' core beliefs and provokes introspection.\n"
+            "Counterintuitive Statistic: Share a surprising, lesser-known fact or statistic that subverts expectations and piques curiosity.\n"
+            "Personal Narrative: Offer a brief but compelling story that relates the topic to the viewer's own life or experiences.\n"
+            "Viewer Connection:\n"
+            "Address the audience directly, acknowledging their curiosity and existing knowledge.\n"
+            "Use inclusive language like \"Let's delve into...\" to create a sense of camaraderie.\n"
+            "Hint at deeper insights to come, promising a transformative experience.\n"
+            "Roadmap with Intrigue:\n"
+            "Provide a brief, exciting overview of what the video will cover without revealing all the details.\n"
+            "Foreshadow major revelations to build anticipation.\n"
+            "Example: \"By the end of this video, you'll perceive {topic} through an entirely new perspective.\"\n"
+            "Challenging Popular Perceptions: Deepen the Inquiry\n\n"
+            "Deconstructing Common Narratives:\n"
+            "Introduce common beliefs or assumptions about {topic}, acknowledging their historical or cultural roots.\n"
+            "Respectfully and rigorously dismantle misconceptions, presenting clear, evidence-based clarifications.\n"
+            "Emphasize that revising one's understanding is a sign of intellectual growth.\n"
+            "Rhetorical Engagement:\n"
+            "Pose open-ended questions that encourage viewers to reflect critically.\n"
+            "Use strategic pauses to give viewers time to ponder before unveiling deeper insights.\n"
+            "Example: \"Why do we hold onto the belief that [common misconception]? Let's examine the evidence.\"\n"
+            "Deep Exploration: Balance Rigor and Accessibility\n\n"
+            "Thematic Coherence:\n"
+            "Establish a central thesis or guiding question that anchors the exploration.\n"
+            "Revisit this theme throughout to maintain focus and build intellectual momentum.\n"
+            "Sophisticated Yet Clear Communication:\n"
+            "Break down complex concepts using relatable metaphors and analogies.\n"
+            "Introduce technical terms with clear explanations and context.\n"
+            "Use vivid language to help viewers visualize abstract ideas.\n"
+            "Interdisciplinary Synthesis:\n"
+            "Highlight connections between '{topic}' and other fields or areas of life.\n"
+            "Show unexpected links between seemingly disparate disciplines.\n"
+            "Example: \"This concept in '{topic}' mirrors patterns we see in economics and even music.\"\n"
+            "Cutting-Edge & Open Questions:\n"
+            "Present the latest research and developments with enthusiasm.\n"
+            "Frame unanswered questions as opportunities for further exploration.\n"
+            "Encourage viewers to think critically about ongoing debates.\n"
+            "Astounding Insights: Inspire Awe\n\n"
+            "Revelations with Impact:\n"
+            "Speak about the historical origins and move forward with the intellectual or professional insights. "
+            "Gradually build up to key insights, creating a sense of discovery.\n"
+            "Reveal impactful information strategically for maximum effect.\n"
+            "Humanizing Complex Ideas:\n"
+            "Share stories about the people behind major breakthroughs.\n"
+            "Connect historical journeys to the viewer's own learning process.\n"
+            "Vivid Conceptualization:\n"
+            "Use descriptive, sensory language to bring abstract concepts to life.\n"
+            "Employ thought experiments to help viewers \"experience\" complex ideas.\n"
+            "Develop metaphors that evolve and deepen as the video progresses.\n"
+            "Sustained Engagement: Craft a Captivating Journey\n\n"
+            "Narrative Arc:\n"
+            "Structure the content like a story, with each revelation leading to new questions.\n"
+            "Create intellectual tension and release to keep viewers hooked.\n"
+            "Use cliffhangers to maintain interest.\n"
+            "Active Participation:\n"
+            "Pose challenges or thought experiments directly to the viewer.\n"
+            "Encourage them to apply new knowledge to real-world situations.\n"
+            "Include moments for self-reflection.\n"
+            "Example: \"How might this new understanding change your approach to [everyday activity]?\"\n"
+            "Emotional & Intellectual Resonance:\n"
+            "Tap into the awe-inspiring nature of the topic.\n"
+            "Acknowledge the emotional impact of paradigm shifts.\n"
+            "Create moments of intellectual satisfaction as complex ideas come together.\n"
+            "Conclusion: Leave a Lasting Impression\n\n"
+            "Synthesis of Ideas:\n"
+            "Briefly recap the main points and tie them together thoughtfully.\n"
+            "Revisit the opening theme, highlighting the intellectual journey undertaken.\n"
+            "The Road Ahead:\n"
+            "Pose a final question that encourages further thought.\n"
+            "Suggest potential future developments or areas for exploration.\n"
+            "Community Engagement:\n"
+            "Invite viewers to discuss the topic in the comments.\n"
+            "Suggest a specific question or topic for them to consider.\n"
+            "Inspirational Close:\n"
+            "Connect the intellectual journey to personal growth and societal progress.\n"
+            "End with a call to action, encouraging continued curiosity and learning.\n"
+            "Additional Techniques for Maximum Impact\n\n"
+            "Cinematic Language:\n"
+            "Use visual descriptors to create vivid mental scenes.\n"
+            "Craft metaphors and analogies that evolve as the narrative progresses.\n"
+            "Example: \"Imagine zooming into the very fabric of reality...\"\n"
+            "Varied Cognitive Pacing:\n"
+            "Alternate between fast-paced information and slower, reflective moments.\n"
+            "Use linguistic devices like alliteration or repetition for emphasis.\n"
+            "Vary sentence length to maintain a dynamic rhythm.\n"
+            "Intellectual Plot Twists:\n"
+            "Introduce unexpected perspectives or contradictions.\n"
+            "Create cognitive dissonance, then resolve it for intellectual satisfaction.\n"
+            "Futuristic Speculation:\n"
+            "Encourage viewers to imagine potential future scenarios related to {topic}.\n"
+            "Frame these speculations as part of an ongoing, exciting intellectual journey.\n"
+            "Meta-Commentary on Learning:\n"
+            "Reflect on the learning process itself.\n"
+            "Validate the challenge of grappling with complex ideas, fostering a growth mindset.\n"
+            "Guidelines for Length and Timing\n\n"
+            "Target Duration:\n"
+            f"Aim for a script that fits within a {length['minutes']}-minute video format "
+            f"(approximately {length['words_min']} to {length['words_max']} words).\n"
+            "Adjust the depth and detail to suit this timeframe without sacrificing clarity or engagement.\n"
+            "Concise Thoroughness:\n"
+            "Ensure each section is thorough yet concise.\n"
+            "Maintain a logical progression without unnecessary digressions.\n"
+            "Final Notes:\n\n"
+            "Tone and Style:\n"
+            "Maintain an authoritative yet inviting tone.\n"
+            "Balance intellectual rigor with emotional resonance.\n"
+            "Avoid jargon unless it's clearly explained and adds value.\n"
+            "Audience Engagement:\n"
+            "Connect with the audience throughout.\n"
+            "Encourage active thinking and personal connection to the material.\n"
+            "Foster a sense of shared exploration and discovery. "
+            "Remember to sound intimate throughout and not like someone removed, giving a speech. "
+            "If you think your output is good, try to make it even more dense with the field's insights, and advances in concepts, "
+            "and connect the dots fluidly, and only then give it to me."
+        ),
+        "temperature": 0.9,
+        "provider": "anthropic",
+        "model_override": "claude-opus-4-0-20250514",
+    }
+
+
+# --- Draft variants for parallel generation (all use best models) ---
 DRAFT_VARIANTS = [
     {
         "label": "Draft A (Claude Opus, high creativity)",
@@ -204,20 +220,20 @@ DRAFT_VARIANTS = [
         "temperature": 0.95,
     },
     {
-        "label": "Draft B (Claude Sonnet, balanced)",
+        "label": "Draft B (Claude Opus, balanced)",
         "provider": "anthropic",
-        "model_override": "claude-sonnet-4-20250514",
+        "model_override": "claude-opus-4-0-20250514",
         "temperature": 0.7,
     },
     {
-        "label": "Draft C (OpenAI GPT-4o, different perspective)",
+        "label": "Draft C (GPT-4o, different perspective)",
         "provider": "openai",
-        "model_override": "gpt-4o",
+        "model_override": "gpt-4o-2024-11-20",
         "temperature": 0.85,
     },
 ]
 
-# --- Judge: Select best draft ---
+# --- Judge: Select best draft (Opus for best judgment) ---
 JUDGE_PROMPT = {
     "name": "Judge: Select Best Draft",
     "description": "Evaluates 3 parallel drafts and selects the strongest one",
@@ -259,7 +275,7 @@ JUDGE_PROMPT = {
     "model_override": "claude-opus-4-0-20250514",
 }
 
-# --- Critique prompt template (used between stages) ---
+# --- Critique prompt template (GPT-4o for varied perspective) ---
 CRITIQUE_TEMPLATE = {
     "system": (
         "You are a brutally honest editorial critic. You identify weaknesses, missed opportunities, "
@@ -280,10 +296,10 @@ CRITIQUE_TEMPLATE = {
     ),
     "temperature": 0.3,
     "provider": "openai",
-    "model_override": "gpt-4o",
+    "model_override": "gpt-4o-2024-11-20",
 }
 
-# --- Stages 2-5 (all receive topic + research + critique context) ---
+# --- Enhancement stages (all use Opus for highest quality) ---
 ENHANCEMENT_STAGES = [
     {
         "name": "Stage 2: Artistic & Rhetorical Enhancement",
@@ -384,8 +400,8 @@ ENHANCEMENT_STAGES = [
             "{previous_output}"
         ),
         "temperature": 0.5,
-        "provider": "openai",
-        "model_override": "gpt-4o",
+        "provider": "anthropic",
+        "model_override": "claude-opus-4-0-20250514",
     },
     {
         "name": "Stage 4: Humanization",
@@ -456,7 +472,7 @@ ENHANCEMENT_STAGES = [
         ),
         "temperature": 0.3,
         "provider": "anthropic",
-        "model_override": None,
+        "model_override": "claude-opus-4-0-20250514",
     },
 ]
 
@@ -466,3 +482,7 @@ DIFFERENTIATION_CONTEXT = (
     "Your script MUST use a completely different opening technique, different vocabulary patterns, "
     "and a different structural approach than these:\n\n{previous_openings}\n\n---\n\n"
 )
+
+# Legacy exports for backwards compatibility
+RESEARCH_STAGE = get_research_stage("10 min")
+DRAFT_STAGE = get_draft_stage("10 min")

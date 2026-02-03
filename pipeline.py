@@ -25,11 +25,11 @@ from dotenv import load_dotenv
 from prompts import (
     CRITIQUE_TEMPLATE,
     DIFFERENTIATION_CONTEXT,
-    DRAFT_STAGE,
     DRAFT_VARIANTS,
     ENHANCEMENT_STAGES,
     JUDGE_PROMPT,
-    RESEARCH_STAGE,
+    get_draft_stage,
+    get_research_stage,
 )
 
 load_dotenv()
@@ -55,7 +55,8 @@ def _get_openai_client():
     _init_keys()
     return openai.OpenAI()
 
-DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
+
+DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-0-20250514"
 DEFAULT_OPENAI_MODEL = "gpt-4o-2024-11-20"
 MAX_TOKENS = 16384
 
@@ -143,8 +144,8 @@ def _call_llm_safe(provider: str, system: str, user_content: str, **kwargs) -> s
 # ──────────────────────────────────────────────
 # Stage 0: Research Gathering
 # ──────────────────────────────────────────────
-def run_research(topic: str) -> str:
-    stage = RESEARCH_STAGE
+def run_research(topic: str, length: str = "10 min") -> str:
+    stage = get_research_stage(length)
     user_content = stage["user_template"].format(topic=topic)
     return _call_llm_safe(
         provider=stage["provider"],
@@ -158,7 +159,7 @@ def run_research(topic: str) -> str:
 # ──────────────────────────────────────────────
 # Stage 1: Parallel Drafts
 # ──────────────────────────────────────────────
-def run_parallel_drafts(topic: str, research: str) -> list[dict]:
+def run_parallel_drafts(topic: str, research: str, length: str = "10 min") -> list[dict]:
     """Generate 3 drafts in parallel. Returns list of {label, text}."""
     # Add differentiation context if we have history
     openings = _load_history()
@@ -168,7 +169,7 @@ def run_parallel_drafts(topic: str, research: str) -> list[dict]:
             previous_openings="\n---\n".join(openings[-5:])
         )
 
-    stage = DRAFT_STAGE
+    stage = get_draft_stage(length)
     base_user = stage["user_template"].format(topic=topic, research=research)
     user_content = diff_prefix + base_user
 
@@ -298,23 +299,27 @@ def run_enhancement_stage(
 # ──────────────────────────────────────────────
 # Full Pipeline (generator for UI updates)
 # ──────────────────────────────────────────────
-def run_full_pipeline(topic: str):
+def run_full_pipeline(topic: str, length: str = "10 min"):
     """
     Generator yielding status updates as tuples:
         (step_name, step_type, data)
 
     step_type is one of: "research", "drafts", "judge", "critique", "enhancement", "done"
     data contains the relevant output for that step.
+
+    Args:
+        topic: The speech topic
+        length: Speech length key ("5 min", "10 min", "15 min", "20 min")
     """
 
     # Step 1: Research
     yield ("Stage 0: Research Gathering", "research", {"status": "running"})
-    research = run_research(topic)
+    research = run_research(topic, length)
     yield ("Stage 0: Research Gathering", "research", {"status": "done", "text": research})
 
     # Step 2: Parallel drafts
     yield ("Stage 1: Parallel Drafts", "drafts", {"status": "running"})
-    drafts = run_parallel_drafts(topic, research)
+    drafts = run_parallel_drafts(topic, research, length)
     yield ("Stage 1: Parallel Drafts", "drafts", {"status": "done", "drafts": drafts})
 
     # Step 3: Judge
