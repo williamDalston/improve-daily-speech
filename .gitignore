@@ -1,0 +1,5 @@
+.env
+speech_history.json
+speeches.db
+__pycache__/
+*.pyc
