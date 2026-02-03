@@ -33,6 +33,7 @@ FREE_ACCESS_EMAILS = {
     "faradaybach@gmail.com",
     "iamemanucci@gmail.com",
     "test@example.com",  # Test account
+    "guest@mindcast.app",  # Guest users
 }
 
 # Number of free episodes for all users before payment required

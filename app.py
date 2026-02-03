@@ -256,17 +256,31 @@ PIPELINE_LABELS = [
 
 
 # ── Helper: audio player ───────────────────────────────────
-def _render_audio_player(audio_bytes: bytes, key_prefix: str):
-    """Custom HTML5 audio player with speed control."""
+def _render_audio_player(audio_bytes: bytes, key_prefix: str, autoplay: bool = False):
+    """Custom HTML5 audio player with speed control and optional autoplay."""
     b64 = base64.b64encode(audio_bytes).decode()
     pid = f"p_{key_prefix}"
     sid = f"s_{key_prefix}"
     lid = f"l_{key_prefix}"
 
+    # Autoplay attribute and script for browsers that block autoplay
+    autoplay_attr = "autoplay" if autoplay else ""
+    autoplay_script = f"""
+        <script>
+            // Try to autoplay after user interaction context
+            setTimeout(function() {{
+                var audio = document.getElementById('{pid}');
+                if (audio) {{
+                    audio.play().catch(function(e) {{ console.log('Autoplay blocked:', e); }});
+                }}
+            }}, 100);
+        </script>
+    """ if autoplay else ""
+
     html = f"""
     <div class="audio-container">
         <audio id="{pid}" style="width:100%;margin-bottom:10px;"
-               controls controlslist="nodownload">
+               controls controlslist="nodownload" {autoplay_attr}>
             <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
         </audio>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -280,16 +294,17 @@ def _render_audio_player(audio_bytes: bytes, key_prefix: str):
             <span id="{lid}" style="color:#89b4fa;font-weight:bold;font-size:13px;min-width:35px;">1.0x</span>
         </div>
     </div>
+    {autoplay_script}
     """
     st.components.v1.html(html, height=140)
 
 
-def _render_audio_section(speech_id: int, user_id: int, final_text: str, key_prefix: str):
+def _render_audio_section(speech_id: int, user_id: int, final_text: str, key_prefix: str, autoplay: bool = False):
     """Audio generation and playback - simple and focused."""
     existing_audio = get_audio(speech_id, user_id)
 
     if existing_audio:
-        _render_audio_player(existing_audio, key_prefix)
+        _render_audio_player(existing_audio, key_prefix, autoplay=autoplay)
 
         # Simple download button
         st.download_button(
@@ -394,6 +409,7 @@ def render_paywall():
 defaults = {
     "topic": "",
     "length": "10 min",
+    "selected_voice": "onyx",
     "running": False,
     "error": None,
     "steps": [],
@@ -451,14 +467,28 @@ if st.session_state.view == "create":
         label_visibility="collapsed",
     )
 
-    # Simple duration selector inline
-    length = st.select_slider(
-        "Episode length",
-        options=EPISODE_LENGTHS,
-        value="10 min",
-        label_visibility="collapsed",
-    )
-    st.caption(f"{length} episode")
+    # Duration and voice in a clean row
+    col_len, col_voice = st.columns(2)
+    with col_len:
+        length = st.select_slider(
+            "Duration",
+            options=EPISODE_LENGTHS,
+            value="10 min",
+            label_visibility="collapsed",
+        )
+        st.caption(f"{length}")
+    with col_voice:
+        voice_choice = st.radio(
+            "Voice",
+            options=["Male", "Female"],
+            index=0,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+        st.caption("narrator voice")
+
+    # Map voice choice to voice ID
+    selected_voice = "onyx" if voice_choice == "Male" else "nova"
 
     generate = st.button(
         "Create Episode",
@@ -470,6 +500,7 @@ if st.session_state.view == "create":
     if generate and topic.strip():
         st.session_state.topic = topic.strip()
         st.session_state.length = length
+        st.session_state.selected_voice = selected_voice
         st.session_state.steps = []
         st.session_state.final_text = None
         st.session_state.last_speech_id = None
@@ -525,14 +556,15 @@ if st.session_state.view == "create":
             st.session_state.last_speech_id = speech_id
 
             # Generate audio immediately so it's ready when page refreshes
+            voice = st.session_state.get("selected_voice", "onyx")
             status_container.markdown("""
             <div style="text-align: center; padding: 1rem; color: #64748b;">
                 Creating audio...
             </div>
             """, unsafe_allow_html=True)
             try:
-                audio_bytes = generate_audio(st.session_state.final_text, voice="onyx", speed=1.0)
-                save_audio(speech_id, user["id"], audio_bytes, "onyx")
+                audio_bytes = generate_audio(st.session_state.final_text, voice=voice, speed=1.0)
+                save_audio(speech_id, user["id"], audio_bytes, voice)
                 progress_bar.progress(1.0)
             except Exception:
                 pass  # Audio will be generated on demand if this fails
@@ -549,12 +581,13 @@ if st.session_state.view == "create":
         st.markdown("---")
         st.markdown(f"### {st.session_state.topic}")
 
-        # Audio first - already generated during pipeline
+        # Audio first - already generated during pipeline, autoplay for immediate listening
         _render_audio_section(
             speech_id=st.session_state.last_speech_id,
             user_id=user["id"],
             final_text=st.session_state.final_text,
             key_prefix="create_audio",
+            autoplay=True,
         )
 
         # Transcript and details in expanders

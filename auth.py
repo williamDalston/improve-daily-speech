@@ -194,22 +194,8 @@ def render_login_page():
     <div class="login-hero">
         <h1 class="login-title">MindCast</h1>
         <p class="login-subtitle">
-            Transform any topic into an engaging documentary that makes advanced knowledge stick.
+            Learn anything through documentary-style audio
         </p>
-        <div class="login-features">
-            <div class="login-feature">
-                <div class="login-feature-icon">&#128218;</div>
-                <div class="login-feature-text">Deep Research</div>
-            </div>
-            <div class="login-feature">
-                <div class="login-feature-icon">&#128161;</div>
-                <div class="login-feature-text">Expert Perspectives</div>
-            </div>
-            <div class="login-feature">
-                <div class="login-feature-icon">&#127911;</div>
-                <div class="login-feature-text">Listen & Learn</div>
-            </div>
-        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -221,20 +207,20 @@ def render_login_page():
             st.link_button("Continue with Google", login_url, use_container_width=True, type="primary")
             st.markdown("")
             st.caption("We only access your name and email to personalize your experience.")
-            st.markdown("---")
-            st.caption("Or continue with email")
+            st.markdown("")
+            st.markdown("")
 
-        # Email login (always available, defaults to free access email)
-        dev_name = st.text_input("Name", value="Test User")
-        dev_email = st.text_input("Email", value="test@example.com")
-        st.markdown("")
-        if st.button("Continue with Email", type="primary" if not is_configured() else "secondary", use_container_width=True):
+        # Quick guest access - one click, no form
+        if st.button("Try as Guest", type="secondary" if is_configured() else "primary", use_container_width=True):
             from database import get_or_create_user
             user = get_or_create_user(
-                email=dev_email, name=dev_name, provider="email"
+                email="guest@mindcast.app", name="Guest", provider="guest"
             )
             st.session_state.user = user
             st.rerun()
+
+        if is_configured():
+            st.caption("No sign-up required")
 
     return False
 
