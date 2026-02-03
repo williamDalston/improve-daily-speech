@@ -193,10 +193,50 @@ def render_login_page():
         }
     </style>
     <div class="login-hero">
-        <h1 class="login-title">MindCast</h1>
+        <h1 class="login-title">🎧 MindCast</h1>
         <p class="login-subtitle">
             Learn anything through documentary-style audio
         </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Feature highlights
+    st.markdown("""
+    <style>
+        .features-row {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        .feature-item {
+            text-align: center;
+            color: #6b7280;
+            font-size: 0.85rem;
+        }
+        .feature-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.25rem;
+        }
+        @media (max-width: 480px) {
+            .features-row { gap: 1rem; }
+            .feature-item { font-size: 0.8rem; }
+        }
+    </style>
+    <div class="features-row">
+        <div class="feature-item">
+            <div class="feature-icon">🔬</div>
+            <div>Deep Research</div>
+        </div>
+        <div class="feature-item">
+            <div class="feature-icon">🎙️</div>
+            <div>Pro Narration</div>
+        </div>
+        <div class="feature-item">
+            <div class="feature-icon">⚡</div>
+            <div>Any Topic</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 

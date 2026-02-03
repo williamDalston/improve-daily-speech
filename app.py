@@ -18,6 +18,7 @@ from payments import (
     get_customer_portal_url, can_generate_free, get_free_episodes_remaining,
     FREE_EPISODE_LIMIT,
 )
+from topics import get_random_topic, get_featured_topics, TOPIC_CATEGORIES, get_topics_by_category
 
 st.set_page_config(
     page_title="MindCast",
@@ -364,6 +365,128 @@ st.markdown("""
         letter-spacing: 0.05em;
         color: #9ca3af;
         margin-bottom: 0.25rem;
+    }
+
+    /* Topic suggestions */
+    .topic-suggestions {
+        margin: 1rem 0;
+    }
+    .topic-suggestions-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-bottom: 0.5rem;
+    }
+    .topic-chip {
+        display: inline-block;
+        background: #f3f4f6;
+        border: 1px solid #e5e7eb;
+        border-radius: 20px;
+        padding: 0.4rem 0.75rem;
+        margin: 0.2rem;
+        font-size: 0.85rem;
+        color: #374151;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .topic-chip:hover {
+        background: #e5e7eb;
+        border-color: #6366f1;
+        color: #6366f1;
+    }
+    .surprise-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        border: none;
+        border-radius: 20px;
+        padding: 0.4rem 0.85rem;
+        margin: 0.2rem;
+        font-size: 0.85rem;
+        color: white;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .surprise-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+    @media (max-width: 480px) {
+        .topic-chip, .surprise-btn {
+            padding: 0.5rem 0.85rem;
+            font-size: 0.9rem;
+        }
+    }
+
+    /* Success celebration */
+    .success-card {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        color: white;
+        margin-bottom: 1rem;
+        animation: successPop 0.4s ease-out;
+    }
+    @keyframes successPop {
+        0% { transform: scale(0.95); opacity: 0; }
+        50% { transform: scale(1.02); }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    .success-card h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0 0 0.25rem 0;
+    }
+    .success-card p {
+        opacity: 0.9;
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    /* Free episodes badge */
+    .free-badge {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.35rem 0.75rem;
+        border-radius: 20px;
+        display: inline-block;
+        margin-bottom: 1rem;
+    }
+    .free-badge.low {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    /* Sidebar icons */
+    .sidebar-btn-icon {
+        margin-right: 0.5rem;
+        font-size: 1rem;
+    }
+
+    /* Smooth transitions on interactive elements */
+    .stButton > button {
+        transition: all 0.15s ease;
+    }
+    .stButton > button:active {
+        transform: scale(0.98);
+    }
+
+    /* Better focus states for accessibility */
+    .stButton > button:focus-visible,
+    .stTextArea textarea:focus-visible {
+        outline: 2px solid #6366f1;
+        outline-offset: 2px;
+    }
+
+    /* Subtle pulse on generate button when ready */
+    @keyframes subtlePulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+        50% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15); }
+    }
+    .ready-to-generate {
+        animation: subtlePulse 2s infinite;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -783,8 +906,8 @@ def render_paywall():
     st.markdown("")
     st.markdown("""
     <div class="paywall-card">
-        <h2>Unlimited Learning</h2>
-        <p>Create episodes on any topic you want to explore.</p>
+        <h2>🎧 Unlock Unlimited Learning</h2>
+        <p>Create documentary-style episodes on any topic.<br/>Learn while you commute, exercise, or relax.</p>
         <div class="paywall-price">$19.99<span>/month</span></div>
     </div>
     """, unsafe_allow_html=True)
@@ -792,10 +915,11 @@ def render_paywall():
     st.markdown("")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("Subscribe", type="primary", use_container_width=True):
+        if st.button("Start Learning", type="primary", use_container_width=True):
             base_url = st.context.headers.get("Origin", "http://localhost:8501")
             checkout_url = create_checkout_session(user["email"], user["id"], base_url)
             st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
+        st.caption("Cancel anytime · Secure payment via Stripe")
 
 
 # ── Session state ───────────────────────────────────────────
@@ -828,30 +952,38 @@ with st.sidebar:
 
     # Two main modes: Learn (Episodes) and Reflect (Lenses)
     st.caption("LEARN")
-    if st.button("New Episode", use_container_width=True, type="primary" if st.session_state.view == "create" else "secondary"):
+    if st.button("✨ New Episode", use_container_width=True, type="primary" if st.session_state.view == "create" else "secondary"):
         st.session_state.view = "create"
         st.session_state.viewing_speech = None
         st.session_state.steps = []
         st.session_state.final_text = None
         st.rerun()
-    if st.button("My Episodes", use_container_width=True, type="primary" if st.session_state.view == "library" else "secondary"):
+    if st.button("📚 My Episodes", use_container_width=True, type="primary" if st.session_state.view == "library" else "secondary"):
         st.session_state.view = "library"
         st.rerun()
 
     st.markdown("")
     st.caption("REFLECT")
-    if st.button("New Reflection", use_container_width=True, type="primary" if st.session_state.view == "reflect" else "secondary"):
+    if st.button("🪞 New Reflection", use_container_width=True, type="primary" if st.session_state.view == "reflect" else "secondary"):
         st.session_state.view = "reflect"
         st.session_state.lens_result = None
         st.rerun()
 
-    # Subscription management (only show if subscribed)
+    # Show free episodes remaining (for non-subscribed, non-free users)
     sub = get_user_subscription(user["id"])
+    if sub["status"] != "active" and not is_free_user(user["email"]):
+        remaining = get_free_episodes_remaining(user["id"])
+        if remaining > 0:
+            st.markdown("---")
+            badge_class = "free-badge low" if remaining == 1 else "free-badge"
+            st.markdown(f'<div class="{badge_class}">{remaining} free episode{"s" if remaining > 1 else ""} left</div>', unsafe_allow_html=True)
+
+    # Subscription management (only show if subscribed)
     if sub["status"] == "active" and sub["customer_id"]:
         st.markdown("---")
         base_url = st.context.headers.get("Origin", "http://localhost:8501")
         portal_url = get_customer_portal_url(sub["customer_id"], base_url)
-        st.link_button("Manage Subscription", portal_url, use_container_width=True)
+        st.link_button("⚙️ Manage Subscription", portal_url, use_container_width=True)
 
 
 # ════════════════════════════════════════════════════════════
@@ -867,6 +999,14 @@ if st.session_state.view == "create":
 
     # Show results first if we have them (audio-first experience)
     if st.session_state.final_text and st.session_state.last_speech_id:
+        # Success celebration
+        st.markdown("""
+        <div class="success-card">
+            <h2>Your episode is ready!</h2>
+            <p>Press play to start learning</p>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown(f'<h1 class="hero-title">{st.session_state.topic}</h1>', unsafe_allow_html=True)
 
         # Audio player - prominent and immediate
@@ -884,6 +1024,7 @@ if st.session_state.view == "create":
             st.session_state.final_text = None
             st.session_state.last_speech_id = None
             st.session_state.topic = ""
+            st.session_state.topic_text_area = ""
             st.rerun()
 
         # Transcript in expander (minimal)
@@ -895,15 +1036,59 @@ if st.session_state.view == "create":
     # ── Input form (minimal for mobile) ──
     st.markdown('<h1 class="hero-title">What do you want to learn?</h1>', unsafe_allow_html=True)
 
+    # Initialize topic in session state
+    if "topic_text_area" not in st.session_state:
+        st.session_state.topic_text_area = ""
+
     topic = st.text_area(
         "Topic",
         height=80,
-        placeholder="e.g., How does memory work?",
+        placeholder="e.g., How does memory work and why do we forget?",
         label_visibility="collapsed",
+        key="topic_text_area",
     )
 
+    # "Surprise me" and topic suggestions
+    col_surprise, col_spacer = st.columns([1, 2])
+    with col_surprise:
+        if st.button("🎲 Surprise me", key="surprise_btn", use_container_width=True):
+            st.session_state.topic_text_area = get_random_topic()
+            st.rerun()
+
+    # Show topic suggestions when input is empty
+    if not topic.strip():
+        st.markdown('<div class="topic-suggestions-label">Or try one of these:</div>', unsafe_allow_html=True)
+        suggestions = get_featured_topics(4)
+        cols = st.columns(2)
+        for i, suggestion in enumerate(suggestions):
+            with cols[i % 2]:
+                # Truncate long suggestions for display
+                display = suggestion[:40] + "..." if len(suggestion) > 43 else suggestion
+                if st.button(display, key=f"suggestion_{i}", use_container_width=True):
+                    st.session_state.topic_text_area = suggestion
+                    st.rerun()
+
+        # Category browsing
+        with st.expander("Browse by category"):
+            selected_cat = st.selectbox(
+                "Category",
+                options=list(TOPIC_CATEGORIES.keys()),
+                format_func=lambda x: f"{TOPIC_CATEGORIES[x]['icon']} {TOPIC_CATEGORIES[x]['name']}",
+                label_visibility="collapsed",
+            )
+            if selected_cat:
+                cat_topics = get_topics_by_category(selected_cat, n=6)
+                if cat_topics:
+                    for i, cat_topic in enumerate(cat_topics):
+                        display = cat_topic[:50] + "..." if len(cat_topic) > 53 else cat_topic
+                        if st.button(display, key=f"cat_topic_{i}", use_container_width=True):
+                            st.session_state.topic_text_area = cat_topic
+                            st.rerun()
+                else:
+                    st.caption("No topics found in this category.")
+
     # Defaults - no selection needed
-    length = "10 min"
+    length = "5 min"
     selected_voice = "onyx"
 
     # Options hidden in expander for those who want them
@@ -913,7 +1098,7 @@ if st.session_state.view == "create":
             length = st.selectbox(
                 "Duration",
                 options=EPISODE_LENGTHS,
-                index=1,  # Default to 10 min
+                index=0,  # Default to 5 min (mobile-friendly)
             )
         with col_voice:
             voice_choice = st.selectbox(
@@ -933,7 +1118,9 @@ if st.session_state.view == "create":
 
     # Show time estimate (4 enhancement stages now)
     time_estimates = {"5 min": "3-4", "10 min": "4-6", "15 min": "6-8", "20 min": "8-10"}
-    st.caption(f"~{time_estimates.get(length, '4-6')} min to generate")
+    st.caption(f"⏱️ ~{time_estimates.get(length, '4-6')} min to craft your episode")
+    if not topic.strip():
+        st.caption("💡 Tip: The more specific your topic, the better the episode")
 
     if generate and topic.strip():
         st.session_state.topic = topic.strip()
@@ -1087,25 +1274,30 @@ elif st.session_state.view == "library":
         if not speeches:
             st.markdown("""
             <div class="empty-state">
-                <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">No episodes yet</p>
-                <p style="font-size: 0.9rem;">Create your first one to start learning</p>
+                <p style="font-size: 2rem; margin-bottom: 0.75rem;">🎧</p>
+                <p style="font-size: 1.1rem; margin-bottom: 0.5rem; font-weight: 500;">Your library is empty</p>
+                <p style="font-size: 0.9rem;">Create your first episode and start your learning journey</p>
             </div>
             """, unsafe_allow_html=True)
             st.markdown("")
-            if st.button("Create Episode", type="primary", use_container_width=True):
+            if st.button("✨ Create Your First Episode", type="primary", use_container_width=True):
                 st.session_state.view = "create"
                 st.rerun()
         else:
             for speech in speeches:
+                # Estimate duration from word count (~150 words per minute for narration)
+                word_count = len(speech.get("final_text", "").split())
+                duration_min = max(1, round(word_count / 150))
+
                 # Each episode as a clickable card
                 with st.container():
                     st.markdown(
                         f'<div class="episode-card">'
                         f'<h4>{speech["topic"]}</h4>'
-                        f'<span class="meta">{speech["created_at"][:10]}</span></div>',
+                        f'<span class="meta">{speech["created_at"][:10]} · ~{duration_min} min</span></div>',
                         unsafe_allow_html=True,
                     )
-                    if st.button("Play", key=f"open_{speech['id']}", use_container_width=True):
+                    if st.button("▶️ Play", key=f"open_{speech['id']}", use_container_width=True):
                         st.session_state.viewing_speech = speech["id"]
                         st.rerun()
 
