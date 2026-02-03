@@ -31,6 +31,9 @@ from prompts import (
     DRAFT_VARIANTS,
     ENHANCEMENT_STAGES,
     JUDGE_PROMPT,
+    LEARNING_ADDONS,
+    PERSPECTIVE_LENSES,
+    get_combined_lens_prompt,
     get_draft_stage,
     get_research_stage,
 )
@@ -446,4 +449,89 @@ def run_lens_audio_script(
         user_content=user_content,
         temperature=0.8,
         model_override="claude-sonnet-4-20250514",
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LEARNING ADD-ONS (on-demand after episode generation)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def generate_addon(addon_key: str, topic: str, transcript: str) -> str:
+    """
+    Generate a learning add-on (quiz, journal, takeaways).
+
+    Args:
+        addon_key: One of "quiz", "journal", "takeaways"
+        topic: The episode topic
+        transcript: The full episode transcript
+
+    Returns:
+        Generated add-on content
+    """
+    if addon_key not in LEARNING_ADDONS:
+        raise ValueError(f"Unknown add-on: {addon_key}")
+
+    addon = LEARNING_ADDONS[addon_key]
+    user_content = addon["user_template"].format(topic=topic, transcript=transcript)
+
+    return _call_llm_safe(
+        provider=addon.get("provider", "anthropic"),
+        system=addon["system"],
+        user_content=user_content,
+        temperature=addon["temperature"],
+        model_override=addon.get("model_override", "claude-sonnet-4-20250514"),
+    )
+
+
+def generate_perspective(lens_key: str, topic: str, transcript: str) -> str:
+    """
+    Generate a perspective lens analysis.
+
+    Args:
+        lens_key: One of the perspective lens keys (stoic, first_principles, etc.)
+        topic: The episode topic
+        transcript: The full episode transcript
+
+    Returns:
+        Generated perspective analysis
+    """
+    if lens_key not in PERSPECTIVE_LENSES:
+        raise ValueError(f"Unknown perspective lens: {lens_key}")
+
+    lens = PERSPECTIVE_LENSES[lens_key]
+    user_content = lens["user_template"].format(topic=topic, transcript=transcript)
+
+    return _call_llm_safe(
+        provider=lens.get("provider", "anthropic"),
+        system=lens["system"],
+        user_content=user_content,
+        temperature=lens["temperature"],
+        model_override=lens.get("model_override", "claude-sonnet-4-20250514"),
+    )
+
+
+def generate_combined_perspectives(lens_keys: list[str], topic: str, transcript: str) -> str:
+    """
+    Generate a combined analysis from multiple perspective lenses.
+
+    Args:
+        lens_keys: List of perspective lens keys to combine
+        topic: The episode topic
+        transcript: The full episode transcript
+
+    Returns:
+        Generated combined perspective analysis
+    """
+    combined = get_combined_lens_prompt(lens_keys)
+    if not combined:
+        raise ValueError(f"Invalid lens combination: {lens_keys}")
+
+    user_content = combined["user_template"].format(topic=topic, transcript=transcript)
+
+    return _call_llm_safe(
+        provider=combined.get("provider", "anthropic"),
+        system=combined["system"],
+        user_content=user_content,
+        temperature=combined["temperature"],
+        model_override=combined.get("model_override", "claude-sonnet-4-20250514"),
     )
