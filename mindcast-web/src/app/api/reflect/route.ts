@@ -1,0 +1,83 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
+import Anthropic from '@anthropic-ai/sdk';
+
+const LENS_PROMPTS: Record<string, string> = {
+  stoic: `**Stoic Lens**: Analyze what is within the person's control versus what is not. Focus on virtue, acceptance, and practical wisdom. What would Marcus Aurelius or Epictetus advise?`,
+  socratic: `**Socratic Lens**: Use probing questions to examine assumptions. Challenge the person to think deeper about their beliefs and reasoning. What unexamined assumptions might be at play?`,
+  systems: `**Systems Lens**: Look at the interconnections, feedback loops, and leverage points in this situation. What are the second and third-order effects? Where might small changes have big impact?`,
+  creative: `**Creative Lens**: Explore unconventional solutions and reframe the problem entirely. What would happen if constraints were removed? What analogies from other domains might apply?`,
+  shadow: `**Shadow Lens**: Examine potential hidden motivations, fears, or desires that might be influencing the situation. What might the person be avoiding or not acknowledging to themselves?`,
+};
+
+export async function POST(request: NextRequest) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { situation, lenses } = await request.json();
+
+  if (!situation || !lenses || !Array.isArray(lenses) || lenses.length === 0) {
+    return NextResponse.json(
+      { error: 'Situation and at least one lens are required' },
+      { status: 400 }
+    );
+  }
+
+  // Validate lenses
+  const validLenses = lenses.filter((l: string) => l in LENS_PROMPTS);
+  if (validLenses.length === 0) {
+    return NextResponse.json({ error: 'Invalid lenses' }, { status: 400 });
+  }
+
+  const lensPrompts = validLenses.map((l: string) => LENS_PROMPTS[l]).join('\n\n');
+
+  const client = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
+
+  try {
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      temperature: 0.7,
+      system: `You are a wise counselor who helps people gain clarity on their situations through philosophical lenses. Your analyses are deep, practical, and compassionate. You don't preach—you illuminate.
+
+Provide your analysis using ONLY the lenses specified below. For each lens, offer genuine insight that helps the person see their situation in a new light.
+
+Structure your response with clear headings for each lens, followed by practical takeaways.`,
+      messages: [
+        {
+          role: 'user',
+          content: `Please analyze my situation through the following philosophical lenses:
+
+${lensPrompts}
+
+---
+
+My situation:
+${situation}
+
+---
+
+Provide a thoughtful analysis through each lens, then conclude with 3 actionable insights that synthesize the perspectives.`,
+        },
+      ],
+    });
+
+    const content = message.content[0];
+    if (content.type !== 'text') {
+      throw new Error('Unexpected response type');
+    }
+
+    return NextResponse.json({ analysis: content.text });
+  } catch (error) {
+    console.error('Reflect error:', error);
+    return NextResponse.json(
+      { error: 'Failed to generate analysis' },
+      { status: 500 }
+    );
+  }
+}
