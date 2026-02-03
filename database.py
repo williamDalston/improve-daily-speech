@@ -28,7 +28,10 @@ def init_db():
             name TEXT NOT NULL,
             picture TEXT,
             provider TEXT NOT NULL DEFAULT 'google',
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT,
+            subscription_status TEXT DEFAULT 'none'
         );
 
         CREATE TABLE IF NOT EXISTS speeches (
@@ -55,6 +58,19 @@ def init_db():
         conn.execute("ALTER TABLE speeches ADD COLUMN audio_voice TEXT")
     except sqlite3.OperationalError:
         pass
+    # Migration: add subscription columns to users table
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN subscription_status TEXT DEFAULT 'none'")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -79,6 +95,56 @@ def get_or_create_user(email: str, name: str, picture: str = "", provider: str =
     row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     return dict(row)
+
+
+# --- Subscription operations ---
+
+def update_user_subscription(
+    user_id: int,
+    customer_id: str,
+    subscription_id: str,
+    status: str = "active",
+):
+    """Update user's Stripe subscription info."""
+    conn = _get_conn()
+    conn.execute(
+        """UPDATE users SET
+           stripe_customer_id = ?,
+           stripe_subscription_id = ?,
+           subscription_status = ?
+           WHERE id = ?""",
+        (customer_id, subscription_id, status, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_user_subscription(user_id: int) -> dict:
+    """Get user's subscription info."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT stripe_customer_id, stripe_subscription_id, subscription_status FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    if row:
+        return {
+            "customer_id": row["stripe_customer_id"],
+            "subscription_id": row["stripe_subscription_id"],
+            "status": row["subscription_status"] or "none",
+        }
+    return {"customer_id": None, "subscription_id": None, "status": "none"}
+
+
+def update_subscription_status(user_id: int, status: str):
+    """Update just the subscription status."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE users SET subscription_status = ? WHERE id = ?",
+        (status, user_id),
+    )
+    conn.commit()
+    conn.close()
 
 
 # --- Speech operations ---

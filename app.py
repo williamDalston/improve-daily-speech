@@ -9,10 +9,14 @@ import streamlit as st
 from auth import render_login_page, render_user_menu
 from database import (
     save_speech, get_user_speeches, get_speech, delete_speech,
-    save_audio, get_audio,
+    save_audio, get_audio, get_user_subscription, update_user_subscription,
 )
 from pipeline import run_full_pipeline
 from exporter import export_docx, generate_audio
+from payments import (
+    is_free_user, create_checkout_session, handle_checkout_success,
+    get_customer_portal_url,
+)
 
 st.set_page_config(
     page_title="Speech Writer",
@@ -252,6 +256,58 @@ if not render_login_page():
 
 user = st.session_state.user
 
+# ── Payment callback handling ───────────────────────────────
+query_params = st.query_params
+if query_params.get("payment") == "success":
+    session_id = query_params.get("session_id")
+    if session_id:
+        result = handle_checkout_success(session_id)
+        if result and result["user_id"] == user["id"]:
+            update_user_subscription(
+                user_id=user["id"],
+                customer_id=result["customer_id"],
+                subscription_id=result["subscription_id"],
+                status="active",
+            )
+            st.query_params.clear()
+            st.toast("Subscription activated!")
+            st.rerun()
+    st.query_params.clear()
+
+if query_params.get("payment") == "cancelled":
+    st.query_params.clear()
+    st.toast("Payment cancelled.")
+
+
+# ── Subscription check ──────────────────────────────────────
+def user_can_generate() -> bool:
+    """Check if current user can generate speeches."""
+    if is_free_user(user["email"]):
+        return True
+    sub = get_user_subscription(user["id"])
+    return sub["status"] == "active"
+
+
+def render_paywall():
+    """Render subscription paywall."""
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; color: white;">
+        <h2 style="margin: 0 0 0.5rem 0;">Unlock Speech Writer</h2>
+        <p style="opacity: 0.9; margin-bottom: 1.5rem;">Generate unlimited AI-powered speeches with research, multiple drafts, and professional refinement.</p>
+        <p style="font-size: 2rem; font-weight: bold; margin: 0;">$19.99<span style="font-size: 1rem; font-weight: normal;">/month</span></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("Subscribe Now", type="primary", use_container_width=True):
+            base_url = st.context.headers.get("Origin", "http://localhost:8501")
+            checkout_url = create_checkout_session(user["email"], user["id"], base_url)
+            st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
+
+
 # ── Session state ───────────────────────────────────────────
 defaults = {
     "topic": "",
@@ -281,6 +337,21 @@ with st.sidebar:
         st.session_state.view = "library"
         st.rerun()
 
+    # Subscription status
+    st.markdown("---")
+    if is_free_user(user["email"]):
+        st.caption("Free Access")
+    else:
+        sub = get_user_subscription(user["id"])
+        if sub["status"] == "active":
+            st.caption("Subscribed")
+            if sub["customer_id"]:
+                base_url = st.context.headers.get("Origin", "http://localhost:8501")
+                portal_url = get_customer_portal_url(sub["customer_id"], base_url)
+                st.link_button("Manage Subscription", portal_url, use_container_width=True)
+        else:
+            st.caption("Not subscribed")
+
     # Pipeline progress (only during create view)
     if st.session_state.view == "create" and st.session_state.steps:
         st.markdown("---")
@@ -300,6 +371,13 @@ with st.sidebar:
 if st.session_state.view == "create":
     st.markdown("## Create a Speech")
     st.caption("AI-powered speech generation with research, multiple drafts, and iterative refinement")
+
+    # Check subscription before showing form
+    can_generate = user_can_generate()
+
+    if not can_generate:
+        render_paywall()
+        st.stop()
 
     topic = st.text_area(
         "Topic",
