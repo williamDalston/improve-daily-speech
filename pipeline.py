@@ -1,15 +1,14 @@
 """
-Core pipeline engine.
+Core pipeline engine (optimized for speed).
 
 Flow:
   1. Stage 0: Research gathering (Anthropic)
-  2. Stage 1: 3 parallel drafts (Opus, Sonnet, GPT-4o)
-  3. Judge: Pick best draft + note strengths from losers
-  4. Stages 2-5: Enhancement with critique between each stage
+  2. Stage 1: 2 parallel drafts (Sonnet + GPT-4o)
+  3. Judge: Pick best draft + note strengths from loser
+  4. Stages 2-3: Enhancement with critique before each stage
   5. Save opening paragraph for future differentiation
 
 Each enhancement stage receives: topic, research brief, critique feedback, previous output.
-Critiques alternate between OpenAI and Anthropic for varied perspective.
 """
 
 import json
@@ -160,7 +159,7 @@ def run_research(topic: str, length: str = "10 min") -> str:
 # Stage 1: Parallel Drafts
 # ──────────────────────────────────────────────
 def run_parallel_drafts(topic: str, research: str, length: str = "10 min") -> list[dict]:
-    """Generate 3 drafts in parallel. Returns list of {label, text}."""
+    """Generate drafts in parallel. Returns list of {label, text}."""
     # Add differentiation context if we have history
     openings = _load_history()
     diff_prefix = ""
@@ -173,7 +172,8 @@ def run_parallel_drafts(topic: str, research: str, length: str = "10 min") -> li
     base_user = stage["user_template"].format(topic=topic, research=research)
     user_content = diff_prefix + base_user
 
-    results = [None, None, None]
+    num_drafts = len(DRAFT_VARIANTS)
+    results = [None] * num_drafts
 
     def _generate(idx, variant):
         text = _call_llm_safe(
@@ -185,7 +185,7 @@ def run_parallel_drafts(topic: str, research: str, length: str = "10 min") -> li
         )
         return idx, variant["label"], text
 
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=num_drafts) as executor:
         futures = [
             executor.submit(_generate, i, v) for i, v in enumerate(DRAFT_VARIANTS)
         ]
@@ -201,7 +201,7 @@ def run_parallel_drafts(topic: str, research: str, length: str = "10 min") -> li
 # ──────────────────────────────────────────────
 def run_judge(topic: str, drafts: list[dict]) -> dict:
     """
-    Judge 3 drafts. Returns {
+    Judge drafts (2 or 3). Returns {
         winner_index: int,
         winner_label: str,
         winner_text: str,
@@ -210,12 +210,25 @@ def run_judge(topic: str, drafts: list[dict]) -> dict:
     }
     """
     stage = JUDGE_PROMPT
-    user_content = stage["user_template"].format(
-        topic=topic,
-        draft_a=drafts[0]["text"],
-        draft_b=drafts[1]["text"],
-        draft_c=drafts[2]["text"],
-    )
+
+    # Build user content dynamically based on number of drafts
+    if len(drafts) == 2:
+        user_content = stage["user_template_2"].format(
+            topic=topic,
+            draft_a=drafts[0]["text"],
+            draft_b=drafts[1]["text"],
+        )
+        letter_map = {"A": 0, "B": 1}
+        pattern = r"WINNER:\s*([AB])"
+    else:
+        user_content = stage["user_template"].format(
+            topic=topic,
+            draft_a=drafts[0]["text"],
+            draft_b=drafts[1]["text"],
+            draft_c=drafts[2]["text"],
+        )
+        letter_map = {"A": 0, "B": 1, "C": 2}
+        pattern = r"WINNER:\s*([ABC])"
 
     judgment = _call_llm_safe(
         provider=stage["provider"],
@@ -227,16 +240,16 @@ def run_judge(topic: str, drafts: list[dict]) -> dict:
 
     # Parse winner from judgment
     winner_letter = "A"  # default fallback
-    match = re.search(r"WINNER:\s*([ABC])", judgment, re.IGNORECASE)
+    match = re.search(pattern, judgment, re.IGNORECASE)
     if match:
         winner_letter = match.group(1).upper()
 
-    winner_index = {"A": 0, "B": 1, "C": 2}.get(winner_letter, 0)
+    winner_index = letter_map.get(winner_letter, 0)
 
     # Extract borrow notes
     borrow_notes = ""
     borrow_match = re.search(
-        r"BORROW FROM LOSERS:\s*\n(.*)", judgment, re.DOTALL | re.IGNORECASE
+        r"BORROW FROM LOSER[S]?:\s*\n(.*)", judgment, re.DOTALL | re.IGNORECASE
     )
     if borrow_match:
         borrow_notes = borrow_match.group(1).strip()

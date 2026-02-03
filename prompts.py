@@ -1,17 +1,14 @@
 """
 MindCast content generation pipeline.
 
-Pipeline flow:
+Pipeline flow (optimized for speed):
   Stage 0: Research Gathering (collect facts, studies, figures)
-  Stage 1: Initial Script (3 parallel drafts via different providers/temps)
+  Stage 1: Initial Script (2 parallel drafts - Sonnet + GPT-4o)
   Judge:   Select best draft
-  Stage 2: Artistic & Rhetorical Enhancement
-  Critique 2→3: Evaluate before academic pass
-  Stage 3: Academic Depth
-  Critique 3→4: Evaluate before humanization
-  Stage 4: Humanization
-  Critique 4→5: Evaluate before final polish
-  Stage 5: Final Polish
+  Critique: Evaluate draft for enhancement
+  Stage 2: Deep Enhancement (artistic + academic depth)
+  Critique: Evaluate before final polish
+  Stage 3: Final Polish & Humanization
 
 Every stage after Stage 0 receives the original topic + research brief for context.
 """
@@ -212,36 +209,54 @@ def get_draft_stage(length_key: str = "10 min") -> dict:
     }
 
 
-# --- Draft variants for parallel generation (all use best models) ---
+# --- Draft variants for parallel generation (2 drafts for speed) ---
 DRAFT_VARIANTS = [
     {
-        "label": "Draft A (Claude Opus, high creativity)",
+        "label": "Draft A (Claude Sonnet, balanced)",
         "provider": "anthropic",
         "model_override": "claude-sonnet-4-20250514",
-        "temperature": 0.95,
+        "temperature": 0.8,
     },
     {
-        "label": "Draft B (Claude Opus, balanced)",
-        "provider": "anthropic",
-        "model_override": "claude-sonnet-4-20250514",
-        "temperature": 0.7,
-    },
-    {
-        "label": "Draft C (GPT-4o, different perspective)",
+        "label": "Draft B (GPT-4o, different perspective)",
         "provider": "openai",
         "model_override": "gpt-4o-2024-11-20",
         "temperature": 0.85,
     },
 ]
 
-# --- Judge: Select best draft (Opus for best judgment) ---
+# --- Judge: Select best draft ---
 JUDGE_PROMPT = {
     "name": "Judge: Select Best Draft",
-    "description": "Evaluates 3 parallel drafts and selects the strongest one",
+    "description": "Evaluates parallel drafts and selects the strongest one",
     "system": (
         "You are a world-class editor and literary critic. You evaluate writing with ruthless precision, "
         "scoring on originality, intellectual depth, emotional resonance, specificity of evidence, "
         "and how human/natural the voice sounds. You do NOT write — you only judge."
+    ),
+    "user_template_2": (
+        "Topic: '{topic}'\n\n"
+        "Below are two draft scripts on the same topic. Evaluate each on these criteria (1-10 scale):\n"
+        "1. **Originality** — Does it avoid cliché LLM patterns? Does it feel fresh?\n"
+        "2. **Intellectual Depth** — Does it use specific studies, names, dates, frameworks?\n"
+        "3. **Emotional Resonance** — Does it create genuine feeling, not manufactured sentiment?\n"
+        "4. **Voice & Authenticity** — Does it sound like a real expert talking, not a polished essay?\n"
+        "5. **Structure & Flow** — Does the narrative build compellingly?\n\n"
+        "---\n\n"
+        "DRAFT A:\n{draft_a}\n\n"
+        "---\n\n"
+        "DRAFT B:\n{draft_b}\n\n"
+        "---\n\n"
+        "Score each draft on all 5 criteria. Then declare WINNER: A or B.\n"
+        "Finally, list 2-3 specific strengths from the losing draft that should be incorporated into the winner.\n\n"
+        "Format your response EXACTLY like this:\n"
+        "SCORES:\n"
+        "Draft A: Originality X, Depth X, Emotion X, Voice X, Structure X = Total XX\n"
+        "Draft B: Originality X, Depth X, Emotion X, Voice X, Structure X = Total XX\n\n"
+        "WINNER: [A/B]\n\n"
+        "BORROW FROM LOSER:\n"
+        "- [specific element to incorporate]\n"
+        "- [specific element to incorporate]"
     ),
     "user_template": (
         "Topic: '{topic}'\n\n"
@@ -300,162 +315,52 @@ CRITIQUE_TEMPLATE = {
     "model_override": "gpt-4o-2024-11-20",
 }
 
-# --- Enhancement stages (all use Opus for highest quality) ---
+# --- Enhancement stages (reduced to 2 for speed while maintaining quality) ---
 ENHANCEMENT_STAGES = [
     {
-        "name": "Stage 2: Artistic & Rhetorical Enhancement",
-        "description": "Enhances with artistic flair, rhetorical devices, and deeper insights",
+        "name": "Stage 2: Deep Enhancement",
+        "description": "Combines artistic enhancement with academic depth and rhetorical mastery",
         "system": (
-            "You are a master literary artist, rhetoric specialist, and intellectual enhancer. "
-            "You elevate writing by weaving in rhetorical devices, vivid imagery, and profound depth "
-            "while preserving every piece of existing content."
+            "You are a master literary artist, rhetoric specialist, academic synthesizer, and intellectual enhancer. "
+            "You elevate writing by weaving in rhetorical devices, vivid imagery, theoretical frameworks, "
+            "key discoveries, and profound depth while preserving every piece of existing content."
         ),
         "user_template": (
             "Topic: '{topic}'\n"
             "Research brief for reference:\n{research}\n\n"
             "Critique from editorial review (address these issues):\n{critique}\n\n"
             "---\n\n"
-            "Without losing any of the content already included, please enhance the following output using this advice:\n\n"
+            "Without losing any content, enhance the following script in these ways:\n\n"
             "{previous_output}\n\n"
-            "First I want you to enhance the intellectual stimulation of it, by adding some extra hyper-expert insight. "
-            "Add some historical elements, describing insights accumulated. Then:\n\n"
-            "If something is implied, there is no need to write it out.\n\n"
-            "As you write, if appropriate, shift at some point out of and in an artful way the perspectives on the topic.\n\n"
-            "Vary sentence length: Use a mix of short, medium, and long sentences to create a natural rhythm and maintain "
-            "the reader's interest. Short sentences can provide emphasis, while longer sentences can convey complex ideas or descriptions.\n\n"
-            "Use strong, specific verbs: Choose precise and evocative verbs to convey action and emotion. "
-            "Strong verbs can bring your writing to life and reduce the need for adverbs.\n\n"
-            "Parallel structure: Employ parallelism to create a sense of balance and harmony in your sentences. "
-            "This involves using similar grammatical structures for related ideas or items in a list.\n\n"
-            "Active voice: Write in the active voice whenever possible, as it makes your sentences more direct and engaging. "
-            "The active voice clearly identifies the subject and the action they are performing.\n\n"
-            "Sensory details: Include sensory details to create vivid, immersive descriptions that engage the reader's senses. "
-            "This can help make your sentences more evocative and memorable.\n\n"
-            "Avoid clichés and overused phrases: Strive for originality in your phrasing and avoid relying on clichés or "
-            "overused expressions. This can make your writing feel fresh and distinctive.\n\n"
-            "Concision: Eliminate unnecessary words and phrases, focusing on clarity and precision. "
-            "Aim to convey your meaning in as few words as possible without sacrificing clarity or style.\n\n"
-            "Varied sentence structure: Experiment with different sentence structures, such as compound, complex, or "
-            "compound-complex sentences. This can create variety and keep your paragraphs from feeling monotonous.\n\n"
-            "Balance and contrast: Create balance and contrast within sentences and paragraphs by juxtaposing opposing ideas "
-            "or contrasting descriptions. This can add depth and interest to your writing.\n\n"
-            "Transition words and phrases: Use transition words and phrases to connect ideas and guide the reader through your "
-            "paragraphs. This helps maintain a logical flow and coherence in your writing.\n\n"
-            "Read your work aloud: Read your sentences and paragraphs aloud to assess their rhythm, flow, and overall sound. "
-            "This can help you identify areas that need improvement and fine-tune your writing style.\n\n"
-            "Show, don't tell: Use specific actions, events, and imagery to convey emotions, thoughts, and character development "
-            "rather than simply stating them.\n\n"
-            "Use concrete images: Focus on writing sentences that are associated with a concrete image to keep the reader's attention.\n\n"
-            "Balance rhetorical techniques so it moves forward in an enchanting way, but not so sporadically, but in tasteful moments.\n\n"
-            "Focus on script development: the writing should have a unique personality, backstory, goals, and characteristics "
-            "that the reader can relate to and engage with.\n\n"
-            "Incorporate undertones: When appropriate to create an emotional connection and add depth to the narrative.\n\n"
-            "Answer open questions: Ensure that all questions raised in the story are somewhat answered, guided, or resolved by the end, "
-            "to provide the reader with a sense of closure and satisfaction.\n\n"
-            "Maintain the detailed structure to help guide the writing process and maintain consistency throughout the script.\n\n"
-            "Use conflict and tension: Introduce conflicts and tension, both internal and external, to keep the reader engaged "
-            "and invested in the story.\n\n"
-            "Incorporate subplots: Weave in subplots to add dimension to the story and further develop the characters.\n\n"
-            "Revise and refine: Continuously revise and refine the writing, taking into account feedback and suggestions for "
-            "improvement to create a polished final product.\n\n"
-            "Also, keep in mind these rhetorical devices:\n\n"
-            "Alliteration, Polyptoton, Antithesis, Merism, Blazon, Synaesthesia, Aposiopesis, Hyperbaton, "
-            "Anadiplosis, Periodic Sentence, Hypotaxis & Parataxis, Diacope, Rhetorical Question, Hendiadys, "
-            "Epistrophe, Tricolon, Epizeuxis, Syllepsis, Isocolon, Enallage, Zeugma, Paradox, Chiasmus, "
-            "Assonance, Catachresis, Litotes, Metonymy & Synecdoche, Transferred Epithets, Pleonasm, "
-            "Epanalepsis, Personification, Hyperbole, Adynaton, Prolepsis, Congeries, Scesis Onomaton, Anaphora.\n\n"
-            "Use these tastefully throughout — not all at once, but woven in at natural moments.\n\n"
-            "The writing and ideas should be extremely deep, profound, and beautiful. "
-            "It should likewise take the hearer on a transformation through himself, potentially helping gain enlightenment. "
-            "Revise your outline at least 20 times to improve it, so that it becomes the best script ever written. "
-            "For all this, please make sure there is a deep review of principles, insights, advances, etc."
+            "**INTELLECTUAL DEPTH:**\n"
+            "- Add hyper-expert insights and historical elements describing accumulated knowledge\n"
+            "- Weave in theoretical frameworks, experimental breakthroughs, and key discoveries\n"
+            "- Include specific experiments/studies with key findings and implications\n"
+            "- Highlight academic debates and controversies that defined the field's evolution\n"
+            "- Balance historical context with cutting-edge advancements and open questions\n\n"
+            "**ARTISTIC ENHANCEMENT:**\n"
+            "- Vary sentence length: short for emphasis, longer for complex ideas\n"
+            "- Use strong, specific verbs and parallel structure\n"
+            "- Include sensory details and concrete imagery\n"
+            "- Avoid clichés; craft original phrasing\n"
+            "- Create balance and contrast by juxtaposing opposing ideas\n"
+            "- Show, don't tell — use actions and imagery to convey meaning\n\n"
+            "**RHETORICAL DEVICES** (use tastefully at natural moments):\n"
+            "Antithesis, Tricolon, Anaphora, Chiasmus, Rhetorical Questions, Metaphor, "
+            "Alliteration, Paradox, Epistrophe, Hyperbole, Litotes, Personification.\n\n"
+            "The writing should be deep, profound, and take the listener on a transformative journey. "
+            "Ensure all facts remain grounded in the research brief."
         ),
         "temperature": 0.7,
         "provider": "anthropic",
         "model_override": "claude-sonnet-4-20250514",
     },
     {
-        "name": "Stage 3: Academic Depth",
-        "description": "Weaves in theoretical frameworks, experiments, and key discoveries",
+        "name": "Stage 3: Final Polish & Humanization",
+        "description": "Adds human voice, natural rhythm, and meticulous line-by-line refinement",
         "system": (
-            "You are an academic researcher and intellectual synthesizer with deep expertise across multiple disciplines. "
-            "You enrich narratives with rigorous academic content while maintaining readability and engagement."
-        ),
-        "user_template": (
-            "Topic: '{topic}'\n"
-            "Research brief for reference:\n{research}\n\n"
-            "Critique from editorial review (address these issues):\n{critique}\n\n"
-            "---\n\n"
-            "Without losing anything written, expand the following script by weaving in important theoretical frameworks, "
-            "experimental breakthroughs, and key discoveries that have shaped the field discussed in this text. "
-            "Be detailed in describing how processes play out practically. "
-            "Dive into the intellectual traditions that ground the field and highlight the academic debates and controversies "
-            "that have defined its evolution. Include specific experiments or studies that have pushed the boundaries of knowledge, "
-            "referencing key findings and their implications. Explore the implications of these insights on both the theoretical "
-            "and practical levels, providing a broad understanding of how the field has evolved over time. "
-            "Ensure that the achievements are seamlessly integrated to add width, depth, and breadth, enriching the narrative "
-            "with a balance of historical context, cutting-edge advancements, and open questions. "
-            "The goal is to present the field in a way that emphasizes the interplay between theory and experimentation, "
-            "illustrating the dynamic progress made, a recent advance if applicable, and the challenges that lie ahead.\n\n"
-            "Here is the script:\n\n"
-            "{previous_output}"
-        ),
-        "temperature": 0.5,
-        "provider": "anthropic",
-        "model_override": "claude-sonnet-4-20250514",
-    },
-    {
-        "name": "Stage 4: Humanization",
-        "description": "Adds natural rhythm, imperfections, subtext, and human voice",
-        "system": (
-            "You are an expert editor specializing in making polished text feel authentically human. "
-            "You add warmth, spontaneity, and natural speech patterns while preserving intellectual depth."
-        ),
-        "user_template": (
-            "Topic: '{topic}'\n"
-            "Research brief for reference (ensure facts remain accurate):\n{research}\n\n"
-            "Critique from editorial review (address these issues):\n{critique}\n\n"
-            "---\n\n"
-            "Please take the following text and apply these strategies to give me the final most polished version:\n\n"
-            "Refining Text to Evoke a Human Touch\n\n"
-            "Sentence Structure and Length:\n"
-            "Break rhythm by varying sentence length intentionally. Use short, punchy sentences for emphasis, "
-            "longer flowing sentences for complex ideas. Mix in fragments that reflect natural thought.\n\n"
-            "Subtle Shifts in Thought:\n"
-            "Introduce digressions or non-linear thinking. Use abrupt tone shifts, personal reflections, or subtle "
-            "humor to disrupt the narrative.\n\n"
-            "Embrace Imperfection & Complexity in Grammar:\n"
-            "Include sentence fragments, casual colloquialisms, and moments of less-than-perfect grammar as stylistic choices.\n\n"
-            "Implicitness and Subtext:\n"
-            "Allow the reader to infer meaning. Use imagery and metaphor. Let connections emerge organically.\n\n"
-            "Unpredictable Emotional Fluctuations:\n"
-            "Inject sudden emotional depth — sarcasm, frustration, enthusiasm, vulnerability.\n\n"
-            "Fewer Transitions:\n"
-            "Reduce obvious transition phrases. Let ideas flow organically.\n\n"
-            "Original Phrasing:\n"
-            "Craft unique expressions. Avoid clichés. Insert personal voice and unconventional metaphors.\n\n"
-            "Personal & Historical References:\n"
-            "Bring in obscure historical references that reveal deeper connection to the subject.\n\n"
-            "Unpredictable Argumentation:\n"
-            "Break the mold. Leave certain conclusions open-ended. Present surprising perspectives.\n\n"
-            "Tone Shifts & Contradictions:\n"
-            "Shift tone — analytical to poetic, formal to casual, confident to skeptical.\n\n"
-            "Creative Word Choice:\n"
-            "Use words that evoke distinct imagery. Regional or historical terms. Let diction reflect a unique voice.\n\n"
-            "Additional: Introduce subtle humor or irony. Challenge the reader with open-ended questions. "
-            "Keep all depth and complexity. Do not lose formal depth. Do not remove any content.\n\n"
-            "Here is the text:\n\n"
-            "{previous_output}"
-        ),
-        "temperature": 0.8,
-        "provider": "anthropic",
-        "model_override": "claude-sonnet-4-20250514",
-    },
-    {
-        "name": "Stage 5: Final Polish",
-        "description": "Line-by-line refinement, restoring scientific rigor with human tone",
-        "system": (
-            "You are a meticulous final-pass editor. You go line by line, ensuring every word earns its place. "
+            "You are a meticulous final-pass editor who specializes in making polished text feel authentically human. "
+            "You go line by line, ensuring every word earns its place while adding warmth, spontaneity, and natural speech patterns. "
             "You maintain scientific accuracy and human authenticity in equal measure."
         ),
         "user_template": (
@@ -463,15 +368,25 @@ ENHANCEMENT_STAGES = [
             "Research brief (verify all facts against this):\n{research}\n\n"
             "Critique from editorial review (final check — address any remaining issues):\n{critique}\n\n"
             "---\n\n"
-            "Take the following text and subtly edit it with additions or word or sentence structure changes after internally "
-            "going through it line by line, to make sure everything is perfectly and carefully chosen for effect. "
-            "Maintain a stronger presence of scientific theories, discoveries, and debates, keeping a casual rigor in the text. "
-            "Do not remove any content.\n\n"
-            "Restore all key theories, breakthroughs, and discoveries while keeping the new human tone intact.\n\n"
-            "Here is the text:\n\n"
-            "{previous_output}"
+            "Take the following text and apply these final refinements:\n\n"
+            "{previous_output}\n\n"
+            "**HUMANIZATION:**\n"
+            "- Break rhythm by varying sentence length; mix in natural fragments\n"
+            "- Introduce subtle digressions, personal reflections, or gentle humor\n"
+            "- Allow some imperfection — sentence fragments and colloquialisms as stylistic choices\n"
+            "- Let meaning emerge through imagery and subtext, not just explicit statements\n"
+            "- Shift tone naturally — analytical to poetic, formal to casual, confident to curious\n"
+            "- Reduce obvious transitions; let ideas flow organically\n"
+            "- Craft unique expressions with creative word choices\n\n"
+            "**FINAL POLISH:**\n"
+            "- Go line by line ensuring every word is carefully chosen for effect\n"
+            "- Maintain scientific theories, discoveries, and debates with casual rigor\n"
+            "- Restore key facts while keeping the human tone intact\n"
+            "- Do not remove any content\n\n"
+            "The result should sound like an expert sharing fascinating knowledge in an intimate, engaging way — "
+            "not a polished essay, but a real person talking about something they love."
         ),
-        "temperature": 0.3,
+        "temperature": 0.5,
         "provider": "anthropic",
         "model_override": "claude-sonnet-4-20250514",
     },
