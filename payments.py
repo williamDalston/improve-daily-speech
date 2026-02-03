@@ -28,18 +28,34 @@ def _init_stripe():
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 
 
-# Emails that get free access (no payment required)
+# Emails that get unlimited free access (no payment required)
 FREE_ACCESS_EMAILS = {
     "faradaybach@gmail.com",
+    "iamemanucci@gmail.com",
     "test@example.com",  # Test account
 }
+
+# Number of free episodes for all users before payment required
+FREE_EPISODE_LIMIT = 3
 
 PRICE_ID = "price_1SwbCg4IwNCnJfAHoDc0u2YD"
 
 
 def is_free_user(email: str) -> bool:
-    """Check if email has free access."""
+    """Check if email has unlimited free access."""
     return email.lower() in {e.lower() for e in FREE_ACCESS_EMAILS}
+
+
+def get_free_episodes_remaining(user_id: int) -> int:
+    """Get number of free episodes remaining for a user."""
+    from database import count_user_speeches
+    used = count_user_speeches(user_id)
+    return max(0, FREE_EPISODE_LIMIT - used)
+
+
+def can_generate_free(user_id: int) -> bool:
+    """Check if user has free episodes remaining."""
+    return get_free_episodes_remaining(user_id) > 0
 
 
 def create_checkout_session(user_email: str, user_id: int, base_url: str) -> str:

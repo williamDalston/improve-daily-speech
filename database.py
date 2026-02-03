@@ -184,6 +184,17 @@ def get_user_speeches(user_id: int) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def count_user_speeches(user_id: int) -> int:
+    """Count total speeches created by a user."""
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT COUNT(*) as count FROM speeches WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    return row["count"] if row else 0
+
+
 def get_speech(speech_id: int, user_id: int) -> dict | None:
     """Get a single speech with all stages. Returns None if not found or wrong user."""
     conn = _get_conn()

@@ -37,6 +37,16 @@ os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 def _get_redirect_uri() -> str:
     """Get the redirect URI based on current context."""
+    try:
+        # Try to get the actual host from Streamlit context
+        origin = st.context.headers.get("Origin", "")
+        if origin and "streamlit.app" in origin:
+            return origin
+        host = st.context.headers.get("Host", "")
+        if host and "streamlit.app" in host:
+            return f"https://{host}"
+    except Exception:
+        pass
     return "http://localhost:8501"
 
 
@@ -182,9 +192,9 @@ def render_login_page():
         }
     </style>
     <div class="login-hero">
-        <h1 class="login-title">Speech Writer</h1>
+        <h1 class="login-title">MindCast</h1>
         <p class="login-subtitle">
-            Transform any topic into a polished, professional speech using AI-powered research, multiple drafts, and iterative refinement.
+            Transform any topic into an engaging documentary that makes advanced knowledge stick.
         </p>
         <div class="login-features">
             <div class="login-feature">
@@ -192,12 +202,12 @@ def render_login_page():
                 <div class="login-feature-text">Deep Research</div>
             </div>
             <div class="login-feature">
-                <div class="login-feature-icon">&#9997;</div>
-                <div class="login-feature-text">Multiple Drafts</div>
+                <div class="login-feature-icon">&#128161;</div>
+                <div class="login-feature-text">Expert Perspectives</div>
             </div>
             <div class="login-feature">
-                <div class="login-feature-icon">&#127897;</div>
-                <div class="login-feature-text">Audio Export</div>
+                <div class="login-feature-icon">&#127911;</div>
+                <div class="login-feature-text">Listen & Learn</div>
             </div>
         </div>
     </div>

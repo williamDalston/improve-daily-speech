@@ -1,5 +1,5 @@
 """
-Streamlit UI for the Speech Writer Pipeline.
+MindCast - Documentary-style audio learning.
 Run with: streamlit run app.py
 """
 
@@ -15,12 +15,13 @@ from pipeline import run_full_pipeline
 from exporter import export_docx, generate_audio
 from payments import (
     is_free_user, create_checkout_session, handle_checkout_success,
-    get_customer_portal_url,
+    get_customer_portal_url, can_generate_free, get_free_episodes_remaining,
+    FREE_EPISODE_LIMIT,
 )
 
 st.set_page_config(
-    page_title="Speech Writer",
-    page_icon="🎙️",
+    page_title="MindCast",
+    page_icon="🎧",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -72,8 +73,8 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* Speech cards with hover effects */
-    .speech-card {
+    /* Episode cards with hover effects */
+    .episode-card {
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
         border: 1px solid #e2e8f0;
         border-radius: 16px;
@@ -82,18 +83,18 @@ st.markdown("""
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         animation: fadeInUp 0.5s ease-out;
     }
-    .speech-card:hover {
+    .episode-card:hover {
         border-color: #818cf8;
         box-shadow: 0 10px 40px -10px rgba(99, 102, 241, 0.2);
         transform: translateY(-2px);
     }
-    .speech-card h4 {
+    .episode-card h4 {
         margin: 0 0 0.5rem 0;
         font-size: 1.1rem;
         font-weight: 600;
         color: #1e293b;
     }
-    .speech-card .meta {
+    .episode-card .meta {
         color: #64748b;
         font-size: 0.875rem;
     }
@@ -242,8 +243,8 @@ VOICES = {
     "Ballad (storyteller)": "ballad",
 }
 
-# Speech length options
-SPEECH_LENGTHS = ["5 min", "10 min", "15 min", "20 min"]
+# Episode length options
+EPISODE_LENGTHS = ["5 min", "10 min", "15 min", "20 min"]
 
 PIPELINE_LABELS = [
     "Research", "Drafts", "Judge",
@@ -269,14 +270,14 @@ def _render_pipeline_output(steps, final_text, topic, key_prefix="main"):
         with col_txt:
             st.download_button(
                 "Download .txt", data=final_text,
-                file_name="speech.txt", mime="text/plain",
+                file_name="transcript.txt", mime="text/plain",
                 key=f"{key_prefix}_dl_txt", use_container_width=True,
             )
         with col_doc:
-            docx_bytes = export_docx(final_text, topic or "Speech")
+            docx_bytes = export_docx(final_text, topic or "Episode")
             st.download_button(
                 "Download .docx", data=docx_bytes,
-                file_name="speech.docx",
+                file_name="transcript.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 key=f"{key_prefix}_dl_docx", use_container_width=True,
             )
@@ -433,35 +434,40 @@ if query_params.get("payment") == "cancelled":
 
 # ── Subscription check ──────────────────────────────────────
 def user_can_generate() -> bool:
-    """Check if current user can generate speeches."""
+    """Check if current user can generate episodes."""
+    # Unlimited free access for specific emails
     if is_free_user(user["email"]):
         return True
+    # Check if user has active subscription
     sub = get_user_subscription(user["id"])
-    return sub["status"] == "active"
+    if sub["status"] == "active":
+        return True
+    # Check if user has free episodes remaining
+    return can_generate_free(user["id"])
 
 
 def render_paywall():
     """Render subscription paywall."""
     st.markdown("")
-    st.markdown("""
+    st.markdown(f"""
     <div class="paywall-card">
-        <h2>Unlock Speech Writer</h2>
+        <h2>You've used your {FREE_EPISODE_LIMIT} free episodes</h2>
         <p style="font-size: 1.1rem; max-width: 400px; margin: 0 auto 1rem auto;">
-            Generate unlimited AI-powered speeches with deep research, multiple drafts, and professional refinement.
+            Subscribe to unlock unlimited documentary-style audio on any topic you want to master.
         </p>
         <div class="paywall-price">$19.99<span>/month</span></div>
         <div style="display: flex; flex-direction: column; gap: 0.5rem; max-width: 280px; margin: 1.5rem auto 0 auto; text-align: left;">
             <div class="feature-item">
-                <span>&#10003;</span> Unlimited speech generation
+                <span>&#10003;</span> Unlimited episodes
             </div>
             <div class="feature-item">
-                <span>&#10003;</span> AI research & multiple drafts
+                <span>&#10003;</span> AI research & expert perspectives
             </div>
             <div class="feature-item">
-                <span>&#10003;</span> Professional text-to-speech
+                <span>&#10003;</span> Professional documentary audio
             </div>
             <div class="feature-item">
-                <span>&#10003;</span> Export to Word & audio
+                <span>&#10003;</span> Download transcripts & audio
             </div>
         </div>
     </div>
@@ -470,7 +476,7 @@ def render_paywall():
     st.markdown("")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("Start Creating Speeches", type="primary", use_container_width=True):
+        if st.button("Subscribe Now", type="primary", use_container_width=True):
             base_url = st.context.headers.get("Origin", "http://localhost:8501")
             checkout_url = create_checkout_session(user["email"], user["id"], base_url)
             st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
@@ -497,18 +503,18 @@ with st.sidebar:
     render_user_menu()
     st.markdown("---")
 
-    if st.button("New Speech", use_container_width=True, type="primary"):
+    if st.button("New Episode", use_container_width=True, type="primary"):
         st.session_state.view = "create"
         st.session_state.viewing_speech = None
         st.rerun()
-    if st.button("My Library", use_container_width=True):
+    if st.button("My Episodes", use_container_width=True):
         st.session_state.view = "library"
         st.rerun()
 
     # Subscription status
     st.markdown("---")
     if is_free_user(user["email"]):
-        st.caption("Free Access")
+        st.caption("Unlimited Access")
     else:
         sub = get_user_subscription(user["id"])
         if sub["status"] == "active":
@@ -518,7 +524,12 @@ with st.sidebar:
                 portal_url = get_customer_portal_url(sub["customer_id"], base_url)
                 st.link_button("Manage Subscription", portal_url, use_container_width=True)
         else:
-            st.caption("Not subscribed")
+            # Show free episodes remaining
+            remaining = get_free_episodes_remaining(user["id"])
+            if remaining > 0:
+                st.caption(f"Free: {remaining}/{FREE_EPISODE_LIMIT} episodes left")
+            else:
+                st.caption("Free trial used")
 
     # Pipeline progress (only during create view)
     if st.session_state.view == "create" and st.session_state.steps:
@@ -537,8 +548,8 @@ with st.sidebar:
 # VIEW: Create
 # ════════════════════════════════════════════════════════════
 if st.session_state.view == "create":
-    st.markdown('<h1 class="hero-title">Create Your Speech</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-subtitle">Transform any topic into a polished, professional speech in minutes</p>', unsafe_allow_html=True)
+    st.markdown('<h1 class="hero-title">Explore a Topic</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-subtitle">Transform any topic into an engaging documentary that makes knowledge stick</p>', unsafe_allow_html=True)
 
     # Check subscription before showing form
     can_generate = user_can_generate()
@@ -547,7 +558,7 @@ if st.session_state.view == "create":
         render_paywall()
         st.stop()
 
-    st.markdown("**What's your speech about?**")
+    st.markdown("**What do you want to learn about?**")
     topic = st.text_area(
         "Topic",
         height=100,
@@ -555,12 +566,12 @@ if st.session_state.view == "create":
         label_visibility="collapsed",
     )
 
-    # Speech length selector with better layout
+    # Episode length selector with better layout
     col_length, col_info = st.columns([1, 2])
     with col_length:
         length = st.selectbox(
             "Duration",
-            options=SPEECH_LENGTHS,
+            options=EPISODE_LENGTHS,
             index=1,
             help="Approximate speaking time at normal pace",
         )
@@ -571,7 +582,7 @@ if st.session_state.view == "create":
 
     st.markdown("")
     generate = st.button(
-        "Generate Speech",
+        "Create Episode",
         type="primary",
         disabled=(not topic.strip() or st.session_state.running),
         use_container_width=True,
@@ -588,7 +599,7 @@ if st.session_state.view == "create":
 
         # Enhanced progress display
         st.markdown("---")
-        st.markdown("### Building your speech...")
+        st.markdown("### Crafting your episode...")
 
         progress_bar = st.progress(0)
         status_container = st.empty()
@@ -598,11 +609,11 @@ if st.session_state.view == "create":
 
         stage_messages = {
             "research": "Researching your topic deeply...",
-            "drafts": "Creating multiple draft versions...",
+            "drafts": "Creating multiple perspectives...",
             "judge": "Selecting the best approach...",
             "critique": "Analyzing and refining...",
             "enhancement": "Polishing the content...",
-            "done": "Finalizing your speech...",
+            "done": "Finalizing your episode...",
         }
 
         try:
@@ -649,7 +660,7 @@ if st.session_state.view == "create":
         word_count = len(st.session_state.final_text.split())
         st.markdown(f"""
         <div class="success-banner">
-            Your speech is ready! {word_count:,} words crafted for you.
+            Your episode is ready! {word_count:,} words crafted for you.
         </div>
         """, unsafe_allow_html=True)
 
@@ -678,7 +689,7 @@ elif st.session_state.view == "library":
     if st.session_state.viewing_speech:
         speech = get_speech(st.session_state.viewing_speech, user["id"])
         if not speech:
-            st.error("Speech not found.")
+            st.error("Episode not found.")
             st.session_state.viewing_speech = None
         else:
             # Header with back button
@@ -716,46 +727,46 @@ elif st.session_state.view == "library":
             with col1:
                 st.download_button(
                     "Download .txt", data=speech["final_text"],
-                    file_name="speech.txt", mime="text/plain",
+                    file_name="transcript.txt", mime="text/plain",
                     key="lib_dl_txt", use_container_width=True,
                 )
             with col2:
                 docx_bytes = export_docx(speech["final_text"], speech["topic"])
                 st.download_button(
                     "Download .docx", data=docx_bytes,
-                    file_name="speech.docx",
+                    file_name="transcript.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     key="lib_dl_docx", use_container_width=True,
                 )
             with col3:
-                if st.button("Delete Speech", key="lib_del", use_container_width=True):
+                if st.button("Delete Episode", key="lib_del", use_container_width=True):
                     delete_speech(speech["id"], user["id"])
                     st.session_state.viewing_speech = None
-                    st.toast("Speech deleted.")
+                    st.toast("Episode deleted.")
                     st.rerun()
 
     else:
-        st.markdown('<h1 class="hero-title">Your Library</h1>', unsafe_allow_html=True)
+        st.markdown('<h1 class="hero-title">Your Episodes</h1>', unsafe_allow_html=True)
         speeches = get_user_speeches(user["id"])
 
         if not speeches:
             st.markdown("")
             st.markdown("""
             <div style="text-align: center; padding: 3rem; background: #f8fafc; border-radius: 16px; border: 2px dashed #e2e8f0;">
-                <p style="font-size: 1.2rem; color: #64748b; margin-bottom: 1rem;">No speeches yet</p>
-                <p style="color: #94a3b8;">Create your first speech to get started!</p>
+                <p style="font-size: 1.2rem; color: #64748b; margin-bottom: 1rem;">No episodes yet</p>
+                <p style="color: #94a3b8;">Create your first episode to get started!</p>
             </div>
             """, unsafe_allow_html=True)
             st.markdown("")
-            if st.button("Create Your First Speech", type="primary", use_container_width=True):
+            if st.button("Create Your First Episode", type="primary", use_container_width=True):
                 st.session_state.view = "create"
                 st.rerun()
         else:
-            st.markdown(f'<p class="hero-subtitle">{len(speeches)} speech{"es" if len(speeches) != 1 else ""} created</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="hero-subtitle">{len(speeches)} episode{"s" if len(speeches) != 1 else ""} created</p>', unsafe_allow_html=True)
 
             for speech in speeches:
                 st.markdown(
-                    f'<div class="speech-card">'
+                    f'<div class="episode-card">'
                     f'<h4>{speech["topic"]}</h4>'
                     f'<span class="meta">{speech["created_at"][:10]}  ·  '
                     f'{speech["word_count"]:,} words</span></div>',
