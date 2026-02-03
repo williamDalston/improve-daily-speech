@@ -28,50 +28,202 @@ st.set_page_config(
 # ── Custom CSS ──────────────────────────────────────────────
 st.markdown("""
 <style>
-    /* Clean up default Streamlit padding */
-    .block-container { padding-top: 2rem; max-width: 900px; }
+    /* Base styling */
+    .block-container { padding-top: 1.5rem; max-width: 920px; }
 
-    /* Subtle section cards */
-    .speech-card {
-        background: linear-gradient(135deg, #f8f9fa 0%, #fff 100%);
-        border: 1px solid #e9ecef;
-        border-radius: 12px;
-        padding: 1.25rem 1.5rem;
-        margin-bottom: 0.75rem;
-        transition: border-color 0.2s;
+    /* Animated gradient background for hero elements */
+    @keyframes gradientShift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
     }
-    .speech-card:hover { border-color: #adb5bd; }
-    .speech-card h4 { margin: 0 0 0.25rem 0; font-size: 1.05rem; }
-    .speech-card .meta { color: #6c757d; font-size: 0.85rem; }
 
-    /* Progress steps in sidebar */
-    .step-done { color: #198754; font-weight: 600; }
-    .step-active { color: #0d6efd; font-style: italic; }
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+
+    /* Hero header */
+    .hero-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        background-size: 200% 200%;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: gradientShift 4s ease infinite;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-subtitle {
+        color: #64748b;
+        font-size: 1.1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Speech cards with hover effects */
+    .speech-card {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: fadeInUp 0.5s ease-out;
+    }
+    .speech-card:hover {
+        border-color: #818cf8;
+        box-shadow: 0 10px 40px -10px rgba(99, 102, 241, 0.2);
+        transform: translateY(-2px);
+    }
+    .speech-card h4 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+    .speech-card .meta {
+        color: #64748b;
+        font-size: 0.875rem;
+    }
+
+    /* Progress indicator styling */
+    .step-done {
+        color: #10b981;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .step-active {
+        color: #6366f1;
+        font-weight: 500;
+        animation: pulse 1.5s ease-in-out infinite;
+    }
 
     /* Audio player */
     .audio-container {
-        background: #1a1a2e;
-        border-radius: 12px;
-        padding: 1.25rem;
-        margin: 0.75rem 0;
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
     }
 
-    /* Hide default hamburger menu & footer */
+    /* Hide Streamlit defaults */
     #MainMenu { visibility: hidden; }
     footer { visibility: hidden; }
 
-    /* Nicer text area */
+    /* Enhanced text area */
     .stTextArea textarea {
-        border-radius: 10px;
+        border-radius: 12px;
         font-size: 1rem;
+        border: 2px solid #e2e8f0;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .stTextArea textarea:focus {
+        border-color: #818cf8;
+        box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.1);
     }
 
-    /* Metric styling */
+    /* Metric cards */
     [data-testid="stMetric"] {
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 0.75rem;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-radius: 12px;
+        padding: 1rem;
         text-align: center;
+        border: 1px solid #e2e8f0;
+    }
+
+    /* Success message styling */
+    .success-banner {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        font-weight: 500;
+        animation: fadeInUp 0.5s ease-out;
+        margin: 1rem 0;
+    }
+
+    /* Loading animation */
+    .loading-card {
+        background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+        border-radius: 12px;
+        padding: 2rem;
+        text-align: center;
+    }
+
+    /* Pipeline step cards */
+    .pipeline-step {
+        background: #f8fafc;
+        border-left: 4px solid #818cf8;
+        padding: 1rem 1.25rem;
+        margin: 0.75rem 0;
+        border-radius: 0 12px 12px 0;
+        animation: fadeInUp 0.4s ease-out;
+    }
+
+    /* Buttons enhancement */
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        border: none;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    /* Paywall styling */
+    .paywall-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        background-size: 200% 200%;
+        animation: gradientShift 6s ease infinite;
+        border-radius: 20px;
+        padding: 3rem 2rem;
+        text-align: center;
+        color: white;
+        box-shadow: 0 20px 60px -10px rgba(102, 126, 234, 0.5);
+    }
+    .paywall-card h2 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+    }
+    .paywall-card p { opacity: 0.95; }
+    .paywall-price {
+        font-size: 3rem;
+        font-weight: 800;
+        margin: 1.5rem 0;
+    }
+    .paywall-price span {
+        font-size: 1.25rem;
+        font-weight: 400;
+        opacity: 0.8;
+    }
+
+    /* Feature list */
+    .feature-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        color: rgba(255,255,255,0.95);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -290,19 +442,35 @@ def user_can_generate() -> bool:
 
 def render_paywall():
     """Render subscription paywall."""
-    st.markdown("---")
+    st.markdown("")
     st.markdown("""
-    <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; color: white;">
-        <h2 style="margin: 0 0 0.5rem 0;">Unlock Speech Writer</h2>
-        <p style="opacity: 0.9; margin-bottom: 1.5rem;">Generate unlimited AI-powered speeches with research, multiple drafts, and professional refinement.</p>
-        <p style="font-size: 2rem; font-weight: bold; margin: 0;">$19.99<span style="font-size: 1rem; font-weight: normal;">/month</span></p>
+    <div class="paywall-card">
+        <h2>Unlock Speech Writer</h2>
+        <p style="font-size: 1.1rem; max-width: 400px; margin: 0 auto 1rem auto;">
+            Generate unlimited AI-powered speeches with deep research, multiple drafts, and professional refinement.
+        </p>
+        <div class="paywall-price">$19.99<span>/month</span></div>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-width: 280px; margin: 1.5rem auto 0 auto; text-align: left;">
+            <div class="feature-item">
+                <span>&#10003;</span> Unlimited speech generation
+            </div>
+            <div class="feature-item">
+                <span>&#10003;</span> AI research & multiple drafts
+            </div>
+            <div class="feature-item">
+                <span>&#10003;</span> Professional text-to-speech
+            </div>
+            <div class="feature-item">
+                <span>&#10003;</span> Export to Word & audio
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown("")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("Subscribe Now", type="primary", use_container_width=True):
+        if st.button("Start Creating Speeches", type="primary", use_container_width=True):
             base_url = st.context.headers.get("Origin", "http://localhost:8501")
             checkout_url = create_checkout_session(user["email"], user["id"], base_url)
             st.markdown(f'<meta http-equiv="refresh" content="0;url={checkout_url}">', unsafe_allow_html=True)
@@ -369,8 +537,8 @@ with st.sidebar:
 # VIEW: Create
 # ════════════════════════════════════════════════════════════
 if st.session_state.view == "create":
-    st.markdown("## Create a Speech")
-    st.caption("AI-powered speech generation with research, multiple drafts, and iterative refinement")
+    st.markdown('<h1 class="hero-title">Create Your Speech</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-subtitle">Transform any topic into a polished, professional speech in minutes</p>', unsafe_allow_html=True)
 
     # Check subscription before showing form
     can_generate = user_can_generate()
@@ -379,23 +547,29 @@ if st.session_state.view == "create":
         render_paywall()
         st.stop()
 
+    st.markdown("**What's your speech about?**")
     topic = st.text_area(
         "Topic",
-        height=80,
-        placeholder="e.g. The neuroscience of creativity and how it shapes human potential",
+        height=100,
+        placeholder="Enter your topic... e.g., 'The future of renewable energy and why it matters for the next generation'",
         label_visibility="collapsed",
     )
 
-    # Speech length selector
-    col_length, col_spacer = st.columns([1, 2])
+    # Speech length selector with better layout
+    col_length, col_info = st.columns([1, 2])
     with col_length:
         length = st.selectbox(
-            "Speech Length",
+            "Duration",
             options=SPEECH_LENGTHS,
-            index=1,  # Default to 10 min
+            index=1,
             help="Approximate speaking time at normal pace",
         )
+    with col_info:
+        length_words = {"5 min": "~750", "10 min": "~1,500", "15 min": "~2,250", "20 min": "~3,000"}
+        st.caption(f"")
+        st.markdown(f"<p style='color: #64748b; font-size: 0.9rem; margin-top: 1.7rem;'>{length_words.get(length, '')} words</p>", unsafe_allow_html=True)
 
+    st.markdown("")
     generate = st.button(
         "Generate Speech",
         type="primary",
@@ -412,23 +586,39 @@ if st.session_state.view == "create":
         st.session_state.running = True
         st.session_state.error = None
 
-        progress_bar = st.progress(0, text="Starting...")
-        status_text = st.empty()
+        # Enhanced progress display
+        st.markdown("---")
+        st.markdown("### Building your speech...")
+
+        progress_bar = st.progress(0)
+        status_container = st.empty()
 
         total_steps = 11
         step_count = 0
+
+        stage_messages = {
+            "research": "Researching your topic deeply...",
+            "drafts": "Creating multiple draft versions...",
+            "judge": "Selecting the best approach...",
+            "critique": "Analyzing and refining...",
+            "enhancement": "Polishing the content...",
+            "done": "Finalizing your speech...",
+        }
 
         try:
             for step_name, step_type, data in run_full_pipeline(st.session_state.topic, length):
                 if data.get("status") == "done" or step_type == "done":
                     step_count += 1
                     st.session_state.steps.append((step_name, step_type, data))
-                    progress_bar.progress(
-                        min(step_count / total_steps, 1.0),
-                        text=step_name,
-                    )
+                    progress_bar.progress(min(step_count / total_steps, 1.0))
                 else:
-                    status_text.text(f"{step_name}...")
+                    msg = stage_messages.get(step_type, step_name)
+                    status_container.markdown(f"""
+                    <div class="loading-card">
+                        <p style="font-size: 1.1rem; font-weight: 500; color: #475569; margin: 0;">{msg}</p>
+                        <p style="font-size: 0.875rem; color: #94a3b8; margin: 0.5rem 0 0 0;">{step_name}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
                 if step_type == "done":
                     st.session_state.final_text = data.get("final_text")
@@ -454,9 +644,14 @@ if st.session_state.view == "create":
         st.error(st.session_state.error)
         st.session_state.error = None
 
-    # Show results
+    # Show results with enhanced success message
     if st.session_state.final_text:
-        st.success("Speech generated and saved!")
+        word_count = len(st.session_state.final_text.split())
+        st.markdown(f"""
+        <div class="success-banner">
+            Your speech is ready! {word_count:,} words crafted for you.
+        </div>
+        """, unsafe_allow_html=True)
 
     _render_pipeline_output(
         st.session_state.steps, st.session_state.final_text,
@@ -486,16 +681,13 @@ elif st.session_state.view == "library":
             st.error("Speech not found.")
             st.session_state.viewing_speech = None
         else:
-            # Header row
-            col_back, col_title = st.columns([1, 5])
-            with col_back:
-                if st.button("← Back"):
-                    st.session_state.viewing_speech = None
-                    st.rerun()
-            with col_title:
-                st.markdown(f"## {speech['topic']}")
+            # Header with back button
+            if st.button("← Back to Library", type="secondary"):
+                st.session_state.viewing_speech = None
+                st.rerun()
 
-            st.caption(f"{speech['created_at'][:10]}  ·  {speech['word_count']:,} words")
+            st.markdown(f'<h1 class="hero-title" style="font-size: 1.8rem;">{speech["topic"]}</h1>', unsafe_allow_html=True)
+            st.markdown(f'<p class="hero-subtitle" style="font-size: 0.95rem;">{speech["created_at"][:10]}  ·  {speech["word_count"]:,} words</p>', unsafe_allow_html=True)
 
             # Audio first
             st.markdown("### Listen")
@@ -543,16 +735,23 @@ elif st.session_state.view == "library":
                     st.rerun()
 
     else:
-        st.markdown("## My Library")
+        st.markdown('<h1 class="hero-title">Your Library</h1>', unsafe_allow_html=True)
         speeches = get_user_speeches(user["id"])
 
         if not speeches:
-            st.markdown("No speeches yet.")
-            if st.button("Create your first speech", type="primary"):
+            st.markdown("")
+            st.markdown("""
+            <div style="text-align: center; padding: 3rem; background: #f8fafc; border-radius: 16px; border: 2px dashed #e2e8f0;">
+                <p style="font-size: 1.2rem; color: #64748b; margin-bottom: 1rem;">No speeches yet</p>
+                <p style="color: #94a3b8;">Create your first speech to get started!</p>
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("")
+            if st.button("Create Your First Speech", type="primary", use_container_width=True):
                 st.session_state.view = "create"
                 st.rerun()
         else:
-            st.caption(f"{len(speeches)} speech{'es' if len(speeches) != 1 else ''}")
+            st.markdown(f'<p class="hero-subtitle">{len(speeches)} speech{"es" if len(speeches) != 1 else ""} created</p>', unsafe_allow_html=True)
 
             for speech in speeches:
                 st.markdown(

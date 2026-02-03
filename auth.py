@@ -130,25 +130,89 @@ def render_login_page():
                 st.rerun()
         return False
 
-    # ── Login page ──
+    # ── Login page with enhanced styling ──
     st.markdown("""
-    <div style="text-align: center; padding: 3rem 0 1rem 0;">
-        <h1 style="font-size: 2.5rem; margin-bottom: 0.25rem;">Speech Writer</h1>
-        <p style="color: #6c757d; font-size: 1.1rem; max-width: 500px; margin: 0 auto;">
-            Generate polished speeches on any topic using multi-stage AI refinement
+    <style>
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .login-hero {
+            text-align: center;
+            padding: 4rem 2rem 2rem 2rem;
+        }
+        .login-title {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 4s ease infinite;
+            margin-bottom: 0.75rem;
+        }
+        .login-subtitle {
+            color: #64748b;
+            font-size: 1.2rem;
+            max-width: 480px;
+            margin: 0 auto 2rem auto;
+            line-height: 1.6;
+        }
+        .login-features {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+            margin: 2rem 0;
+        }
+        .login-feature {
+            text-align: center;
+            padding: 1rem;
+        }
+        .login-feature-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+        .login-feature-text {
+            color: #475569;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+    </style>
+    <div class="login-hero">
+        <h1 class="login-title">Speech Writer</h1>
+        <p class="login-subtitle">
+            Transform any topic into a polished, professional speech using AI-powered research, multiple drafts, and iterative refinement.
         </p>
+        <div class="login-features">
+            <div class="login-feature">
+                <div class="login-feature-icon">&#128218;</div>
+                <div class="login-feature-text">Deep Research</div>
+            </div>
+            <div class="login-feature">
+                <div class="login-feature-icon">&#9997;</div>
+                <div class="login-feature-text">Multiple Drafts</div>
+            </div>
+            <div class="login-feature">
+                <div class="login-feature-icon">&#127897;</div>
+                <div class="login-feature-text">Audio Export</div>
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
     if not is_configured():
         # Dev mode
-        st.markdown("---")
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.caption("DEV MODE — OAuth not configured")
+            st.markdown("")
+            st.caption("Development Mode")
             dev_name = st.text_input("Name", value="Developer")
             dev_email = st.text_input("Email", value="dev@localhost")
-            if st.button("Sign In", type="primary", use_container_width=True):
+            st.markdown("")
+            if st.button("Continue", type="primary", use_container_width=True):
                 from database import get_or_create_user
                 user = get_or_create_user(
                     email=dev_email, name=dev_name, provider="dev"
@@ -158,12 +222,12 @@ def render_login_page():
         return False
 
     # Google login
-    st.markdown("")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         login_url = get_login_url()
-        st.link_button("Sign in with Google", login_url, use_container_width=True)
-        st.caption("We only access your name and email.")
+        st.link_button("Continue with Google", login_url, use_container_width=True, type="primary")
+        st.markdown("")
+        st.caption("We only access your name and email to personalize your experience.")
 
     return False
 
