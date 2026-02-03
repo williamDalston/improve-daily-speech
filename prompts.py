@@ -57,7 +57,7 @@ def get_research_stage(length_key: str = "10 min") -> dict:
         ),
         "temperature": 0.4,
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
     }
 
 
@@ -207,7 +207,7 @@ def get_draft_stage(length_key: str = "10 min") -> dict:
         ),
         "temperature": 0.9,
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
     }
 
 
@@ -216,13 +216,13 @@ DRAFT_VARIANTS = [
     {
         "label": "Draft A (Claude Opus, high creativity)",
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
         "temperature": 0.95,
     },
     {
         "label": "Draft B (Claude Opus, balanced)",
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
         "temperature": 0.7,
     },
     {
@@ -272,7 +272,7 @@ JUDGE_PROMPT = {
     ),
     "temperature": 0.2,
     "provider": "anthropic",
-    "model_override": "claude-opus-4-0-20250514",
+    "model_override": "claude-sonnet-4-20250514",
 }
 
 # --- Critique prompt template (GPT-4o for varied perspective) ---
@@ -371,7 +371,7 @@ ENHANCEMENT_STAGES = [
         ),
         "temperature": 0.7,
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
     },
     {
         "name": "Stage 3: Academic Depth",
@@ -401,7 +401,7 @@ ENHANCEMENT_STAGES = [
         ),
         "temperature": 0.5,
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
     },
     {
         "name": "Stage 4: Humanization",
@@ -448,7 +448,7 @@ ENHANCEMENT_STAGES = [
         ),
         "temperature": 0.8,
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
     },
     {
         "name": "Stage 5: Final Polish",
@@ -472,7 +472,7 @@ ENHANCEMENT_STAGES = [
         ),
         "temperature": 0.3,
         "provider": "anthropic",
-        "model_override": "claude-opus-4-0-20250514",
+        "model_override": "claude-sonnet-4-20250514",
     },
 ]
 

@@ -56,7 +56,7 @@ def _get_openai_client():
     return openai.OpenAI()
 
 
-DEFAULT_ANTHROPIC_MODEL = "claude-opus-4-0-20250514"
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514"
 DEFAULT_OPENAI_MODEL = "gpt-4o-2024-11-20"
 MAX_TOKENS = 16384
 
