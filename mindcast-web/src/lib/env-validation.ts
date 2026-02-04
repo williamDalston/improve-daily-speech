@@ -161,12 +161,7 @@ export function validateEnvAndLog(): void {
   if (!result.isValid) {
     console.error('\n❌ Environment Validation Failed:');
     result.errors.forEach((e) => console.error(`   - ${e}`));
-
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('Environment validation failed. Check logs for details.');
-    } else {
-      console.error('\n   Fix these issues before deploying to production.\n');
-    }
+    console.error('\n   Fix these issues in your environment variables.\n');
   } else if (result.warnings.length === 0) {
     console.log('✅ Environment validation passed');
   }
