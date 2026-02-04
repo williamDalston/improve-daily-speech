@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, Square, Waves, Send } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, Square, Waves, Send, ChevronDown, ChevronUp, Brain, Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface InstantHostProps {
@@ -91,6 +91,21 @@ export function InstantHost({
   const [showTextInput, setShowTextInput] = useState(false); // Alternative to voice
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'host' | 'user', text: string}>>([]);
 
+  // Mini-quiz state (collapsible entertainment while waiting)
+  interface QuizQuestion {
+    question: string;
+    options: string[];
+    correctIndex: number;
+    explanation: string;
+  }
+  const [quizExpanded, setQuizExpanded] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
+  const [quizScore, setQuizScore] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizGenerated, setQuizGenerated] = useState(false);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const ambientRef = useRef<HTMLAudioElement | null>(null);
@@ -120,8 +135,9 @@ export function InstantHost({
     }
   }, []);
 
-  // Stop listening - defined early so stopAll can use it
+  // Stop listening completely - defined early so stopAll can use it
   const stopListening = useCallback(() => {
+    shouldAutoRestartRef.current = false; // Disable auto-restart
     if (!recognitionRef.current) return;
     try {
       recognitionRef.current.stop();
@@ -167,6 +183,9 @@ export function InstantHost({
     };
   }, [ambientSound, isStopped]);
 
+  // Track if we should auto-restart listening
+  const shouldAutoRestartRef = useRef(false);
+
   // Initialize speech recognition
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -178,7 +197,7 @@ export function InstantHost({
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = false;
+    recognition.continuous = true; // Keep listening continuously
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
@@ -187,18 +206,33 @@ export function InstantHost({
       const transcript = event.results[last][0].transcript;
       setUserSpeech(transcript);
 
-      if (event.results[last].isFinal) {
+      if (event.results[last].isFinal && transcript.trim().length > 2) {
         // User finished speaking - use ref to get latest callback
+        // Only process if there's meaningful input (more than 2 chars)
         handleUserInputRef.current(transcript);
       }
     };
 
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
+      // Don't treat "no-speech" as an error - just keep listening
+      if ((event as any).error === 'no-speech') {
+        return;
+      }
       setIsListening(false);
     };
 
     recognition.onend = () => {
       setIsListening(false);
+      // Auto-restart if we should keep listening
+      if (shouldAutoRestartRef.current) {
+        setTimeout(() => {
+          try {
+            recognition.start();
+          } catch {
+            // Already started
+          }
+        }, 100);
+      }
     };
 
     recognition.onstart = () => {
@@ -208,6 +242,7 @@ export function InstantHost({
     recognitionRef.current = recognition;
 
     return () => {
+      shouldAutoRestartRef.current = false;
       recognition.abort();
     };
   }, []);
@@ -226,10 +261,11 @@ export function InstantHost({
     }
   }, []);
 
-  // Start listening for user input
+  // Start listening for user input (continuous mode)
   const startListening = useCallback(() => {
     if (!recognitionRef.current || isStopped || isMuted || !micEnabled) return;
 
+    shouldAutoRestartRef.current = true; // Enable auto-restart
     try {
       setUserSpeech('');
       recognitionRef.current.start();
@@ -238,11 +274,24 @@ export function InstantHost({
     }
   }, [isStopped, isMuted, micEnabled]);
 
+  // Pause listening temporarily (for when AI is speaking)
+  const pauseListening = useCallback(() => {
+    shouldAutoRestartRef.current = false;
+    if (!recognitionRef.current) return;
+    try {
+      recognitionRef.current.stop();
+    } catch {
+      // Not started
+    }
+    setIsListening(false);
+  }, []);
+
   // Handle user input and generate response
   const handleUserInput = useCallback(async (transcript: string) => {
     if (!transcript.trim() || isStopped) return;
 
-    stopListening();
+    pauseListening(); // Pause while AI responds (will auto-restart after)
+    setUserSpeech(''); // Clear the speech display
     setPhase('responding');
     setIsLoadingAudio(true);
 
@@ -314,7 +363,7 @@ export function InstantHost({
       // Fall back to regular phase flow
       setPhase('curiosity');
     }
-  }, [topic, conversationHistory, isStopped, isMuted, micEnabled, episodeReady, stopListening, startListening]);
+  }, [topic, conversationHistory, isStopped, isMuted, micEnabled, episodeReady, pauseListening, startListening]);
 
   // Keep ref updated with latest handleUserInput (for speech recognition callback)
   useEffect(() => {
@@ -328,6 +377,48 @@ export function InstantHost({
     setTextInput('');
   }, [textInput, handleUserInput]);
 
+  // Generate quiz questions for the topic
+  const generateQuiz = useCallback(async () => {
+    if (quizGenerated || quizLoading) return;
+    setQuizLoading(true);
+
+    try {
+      const response = await fetch('/api/instant-host/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic }),
+      });
+
+      if (response.ok) {
+        const { questions } = await response.json();
+        setQuizQuestions(questions);
+        setQuizGenerated(true);
+      }
+    } catch (err) {
+      console.error('Quiz generation error:', err);
+    } finally {
+      setQuizLoading(false);
+    }
+  }, [topic, quizGenerated, quizLoading]);
+
+  // Handle quiz answer selection
+  const handleQuizAnswer = useCallback((answerIndex: number) => {
+    if (selectedAnswer !== null) return; // Already answered
+    setSelectedAnswer(answerIndex);
+
+    const currentQuestion = quizQuestions[currentQuizIndex];
+    if (answerIndex === currentQuestion.correctIndex) {
+      setQuizScore(prev => prev + 1);
+    }
+  }, [selectedAnswer, quizQuestions, currentQuizIndex]);
+
+  // Move to next quiz question
+  const nextQuizQuestion = useCallback(() => {
+    if (currentQuizIndex < quizQuestions.length - 1) {
+      setCurrentQuizIndex(prev => prev + 1);
+      setSelectedAnswer(null);
+    }
+  }, [currentQuizIndex, quizQuestions.length]);
 
   // Generate and speak content for a phase
   const generateAndSpeak = useCallback(async (targetPhase: HostPhase, onComplete?: () => void) => {
@@ -882,22 +973,45 @@ export function InstantHost({
             </div>
           )}
 
-          {isListening ? (
-            <div className="flex items-center justify-center gap-2 py-4 rounded-xl bg-success/10 border border-success/30 sm:py-3">
-              <div className="w-3 h-3 rounded-full bg-success animate-pulse" />
-              <span className="text-base text-success font-medium sm:text-sm">
-                {userSpeech || 'Listening...'}
+          {/* Continuous listening indicator */}
+          <div className="relative">
+            <div className={cn(
+              "flex items-center justify-center gap-2 py-4 rounded-xl border sm:py-3 transition-all",
+              isListening
+                ? "bg-success/10 border-success/30"
+                : "bg-surface-secondary/50 border-border"
+            )}>
+              <div className={cn(
+                "w-3 h-3 rounded-full transition-all",
+                isListening ? "bg-success animate-pulse" : "bg-text-muted"
+              )} />
+              <span className={cn(
+                "text-base font-medium sm:text-sm transition-colors",
+                isListening ? "text-success" : "text-text-muted"
+              )}>
+                {userSpeech || (isListening ? 'Listening... speak anytime' : 'Mic paused')}
               </span>
             </div>
-          ) : (
+            {/* Mute/unmute mic button */}
             <button
-              onClick={startListening}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-4 py-4 text-base text-brand font-medium transition-all hover:bg-brand/10 sm:py-3 sm:text-sm"
+              onClick={() => {
+                if (isListening) {
+                  pauseListening();
+                } else {
+                  startListening();
+                }
+              }}
+              className={cn(
+                "absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-colors",
+                isListening
+                  ? "text-success hover:bg-success/20"
+                  : "text-text-muted hover:bg-surface-tertiary"
+              )}
+              title={isListening ? "Pause mic" : "Resume mic"}
             >
-              <Mic className="h-5 w-5" />
-              Tap to speak your own question
+              {isListening ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
             </button>
-          )}
+          </div>
           <div className="flex gap-2 text-sm sm:text-xs">
             <button
               onClick={() => setShowTextInput(true)}
@@ -916,6 +1030,122 @@ export function InstantHost({
               Skip — continue
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Collapsible Mini-Quiz - entertainment while waiting */}
+      {!episodeReady && phase !== 'asking' && phase !== 'idle' && (
+        <div className="mt-4 border-t border-border pt-4">
+          <button
+            onClick={() => {
+              setQuizExpanded(!quizExpanded);
+              if (!quizGenerated && !quizLoading) {
+                generateQuiz();
+              }
+            }}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-surface-secondary transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Brain className="h-4 w-4 text-brand" />
+              <span className="text-sm font-medium text-text-primary">Quick Quiz</span>
+              {quizScore > 0 && (
+                <span className="text-xs bg-brand/10 text-brand px-2 py-0.5 rounded-full">
+                  {quizScore}/{quizQuestions.length} correct
+                </span>
+              )}
+            </div>
+            {quizExpanded ? (
+              <ChevronUp className="h-4 w-4 text-text-muted" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-text-muted" />
+            )}
+          </button>
+
+          {quizExpanded && (
+            <div className="mt-3 space-y-3">
+              {quizLoading ? (
+                <div className="flex items-center justify-center gap-2 py-6">
+                  <Loader2 className="h-5 w-5 animate-spin text-brand" />
+                  <span className="text-sm text-text-muted">Generating quiz...</span>
+                </div>
+              ) : quizQuestions.length > 0 ? (
+                <div className="rounded-xl bg-surface-secondary/50 p-4 space-y-4">
+                  {/* Question counter */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-text-muted">
+                      Question {currentQuizIndex + 1} of {quizQuestions.length}
+                    </span>
+                    <span className="text-xs text-brand font-medium">
+                      Score: {quizScore}
+                    </span>
+                  </div>
+
+                  {/* Question */}
+                  <p className="text-sm font-medium text-text-primary">
+                    {quizQuestions[currentQuizIndex]?.question}
+                  </p>
+
+                  {/* Options */}
+                  <div className="space-y-2">
+                    {quizQuestions[currentQuizIndex]?.options.map((option, idx) => {
+                      const isSelected = selectedAnswer === idx;
+                      const isCorrect = idx === quizQuestions[currentQuizIndex].correctIndex;
+                      const showResult = selectedAnswer !== null;
+
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleQuizAnswer(idx)}
+                          disabled={selectedAnswer !== null}
+                          className={cn(
+                            "w-full text-left px-3 py-2 rounded-lg text-sm transition-all",
+                            showResult && isCorrect
+                              ? "bg-success/20 border border-success/50 text-success"
+                              : showResult && isSelected && !isCorrect
+                                ? "bg-error/20 border border-error/50 text-error"
+                                : isSelected
+                                  ? "bg-brand/20 border border-brand/50 text-brand"
+                                  : "bg-surface hover:bg-surface-tertiary border border-transparent"
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span>{option}</span>
+                            {showResult && isCorrect && <Check className="h-4 w-4" />}
+                            {showResult && isSelected && !isCorrect && <X className="h-4 w-4" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Explanation + Next */}
+                  {selectedAnswer !== null && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-text-secondary italic">
+                        {quizQuestions[currentQuizIndex]?.explanation}
+                      </p>
+                      {currentQuizIndex < quizQuestions.length - 1 ? (
+                        <button
+                          onClick={nextQuizQuestion}
+                          className="w-full py-2 text-sm font-medium text-brand hover:bg-brand/10 rounded-lg transition-colors"
+                        >
+                          Next Question →
+                        </button>
+                      ) : (
+                        <p className="text-center text-sm text-text-muted py-2">
+                          Quiz complete! Final score: {quizScore}/{quizQuestions.length}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-text-muted text-center py-4">
+                  No quiz available
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
