@@ -34,7 +34,8 @@ export const {
             return null;
           }
 
-          const email = credentials.email as string;
+          // Normalize email to lowercase for consistent matching
+          const email = (credentials.email as string).toLowerCase();
           const password = credentials.password as string;
 
           const user = await db.user.findUnique({
