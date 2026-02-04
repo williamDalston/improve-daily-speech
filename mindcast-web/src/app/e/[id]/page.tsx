@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDuration } from '@/lib/utils';
 import { PublicAudioPlayer } from './player';
+import { EpisodeJsonLd, BreadcrumbJsonLd } from '@/components/seo/json-ld';
 import type { Source } from '@/lib/ai/sources';
 import type { Metadata } from 'next';
 
@@ -89,6 +90,23 @@ export default async function PublicEpisodePage({ params, searchParams }: Public
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-surface to-surface-secondary">
+      {/* SEO Structured Data */}
+      <EpisodeJsonLd
+        title={title}
+        description={transcriptPreview || `Documentary-style episode about ${title}`}
+        episodeId={episode.id}
+        datePublished={episode.createdAt.toISOString()}
+        duration={episode.audioDurationSecs || undefined}
+        transcript={episode.transcript || undefined}
+      />
+      <BreadcrumbJsonLd
+        items={[
+          { name: 'Home', url: '/' },
+          { name: 'Episodes', url: '/library' },
+          { name: title, url: `/e/${episode.id}` },
+        ]}
+      />
+
       {/* Header */}
       <header className="border-b border-border bg-surface/80 backdrop-blur-md sticky top-0 z-10">
         <div className="mx-auto max-w-4xl flex items-center justify-between px-4 py-3">
