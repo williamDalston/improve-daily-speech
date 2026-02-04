@@ -32,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AudioPlayer } from '@/components/audio-player';
 import { FootprintsDisplay } from '@/components/footprints-display';
+import { InstantHost } from '@/components/instant-host';
 import { cn } from '@/lib/utils';
 
 interface Footprint {
@@ -287,6 +288,8 @@ export default function CreatePage() {
   const [showPersonalization, setShowPersonalization] = useState(false);
   const [showCustomization, setShowCustomization] = useState(false); // Hide customization until user wants it
   const [isGenerating, setIsGenerating] = useState(false);
+  const [episodeReady, setEpisodeReady] = useState(false);
+  const [autoPlayEpisode, setAutoPlayEpisode] = useState(false);
   const [steps, setSteps] = useState<PipelineStep[]>(PIPELINE_STEPS);
   const [error, setError] = useState<string | null>(null);
   const [previewAudio, setPreviewAudio] = useState<string | null>(null);
@@ -425,7 +428,6 @@ export default function CreatePage() {
       // Check if complete
       if (data.status === 'COMPLETE') {
         pollingRef.current = false;
-        setIsGenerating(false);
 
         // Fetch episode details
         if (data.episodeId) {
@@ -435,6 +437,7 @@ export default function CreatePage() {
             transcript: '', // Will be loaded on episode page
           });
         }
+        setEpisodeReady(true);
         return;
       }
 
@@ -442,6 +445,7 @@ export default function CreatePage() {
       if (data.status === 'FAILED') {
         pollingRef.current = false;
         setIsGenerating(false);
+        setEpisodeReady(false);
         setError(data.error || 'Generation failed');
         return;
       }
@@ -568,6 +572,8 @@ export default function CreatePage() {
     abortControllerRef.current = new AbortController();
 
     setIsGenerating(true);
+    setEpisodeReady(false);
+    setAutoPlayEpisode(false);
     setError(null);
     setResult(null);
     setPreviewAudio(null);
@@ -628,6 +634,8 @@ export default function CreatePage() {
     }
 
     setIsGenerating(false);
+    setEpisodeReady(false);
+    setAutoPlayEpisode(false);
     setCurrentJobId(null);
     setError('Generation cancelled');
   }, [currentJobId]);
@@ -642,6 +650,8 @@ export default function CreatePage() {
 
   const CurrentTip = LOADING_TIPS[tipIndex];
 
+  const episodeResult = !isGenerating ? result : null;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-1 sm:px-0">
       {/* Header - more compact on mobile */}
@@ -654,7 +664,7 @@ export default function CreatePage() {
         </p>
       </div>
 
-      {!result ? (
+      {!episodeResult ? (
         <Card className="overflow-hidden">
           <CardContent className="space-y-5 p-4 sm:p-6">
             {/* Template Selection */}
@@ -998,6 +1008,16 @@ export default function CreatePage() {
             {/* Loading State - Enhanced */}
             {isGenerating && (
               <div className="space-y-4">
+                <InstantHost
+                  topic={topic}
+                  isGenerating={isGenerating}
+                  episodeReady={episodeReady}
+                  onReadyToPlay={() => {
+                    setEpisodeReady(false);
+                    setIsGenerating(false);
+                    setAutoPlayEpisode(true);
+                  }}
+                />
                 {/* Connection lost warning */}
                 {connectionLost && (
                   <div className="flex items-center gap-3 rounded-xl bg-warning/10 p-4 text-warning">
@@ -1128,18 +1148,27 @@ export default function CreatePage() {
             {/* Generate Button - larger touch target */}
             {isGenerating ? (
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleCancel}
-                  className="h-14 flex-1"
-                  size="lg"
-                >
-                  Cancel
-                </Button>
-                <div className="flex h-14 flex-[2] items-center justify-center gap-2 rounded-xl bg-brand/10 text-brand">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-base font-medium">Creating...</span>
-                </div>
+                {episodeReady ? (
+                  <div className="flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-success/10 text-success">
+                    <Check className="h-5 w-5" />
+                    <span className="text-base font-medium">Episode ready</span>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={handleCancel}
+                      className="h-14 flex-1"
+                      size="lg"
+                    >
+                      Cancel
+                    </Button>
+                    <div className="flex h-14 flex-[2] items-center justify-center gap-2 rounded-xl bg-brand/10 text-brand">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span className="text-base font-medium">Creating...</span>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <Button
@@ -1178,7 +1207,7 @@ export default function CreatePage() {
               <CardTitle className="text-xl">{topic}</CardTitle>
             </CardHeader>
             <CardContent>
-              <AudioPlayer src={result.audio} title={topic} />
+              <AudioPlayer src={episodeResult.audio} title={topic} autoPlay={autoPlayEpisode} />
             </CardContent>
           </Card>
 
@@ -1188,7 +1217,7 @@ export default function CreatePage() {
             </CardHeader>
             <CardContent>
               <div className="max-h-[300px] overflow-y-auto whitespace-pre-wrap text-sm text-text-secondary sm:max-h-[400px]">
-                {result.transcript}
+                {episodeResult.transcript}
               </div>
             </CardContent>
           </Card>
@@ -1199,6 +1228,7 @@ export default function CreatePage() {
               variant="outline"
               onClick={() => {
                 setResult(null);
+                setAutoPlayEpisode(false);
                 setTopic('');
               }}
               className="h-12 flex-1"
@@ -1206,7 +1236,7 @@ export default function CreatePage() {
               Create Another
             </Button>
             <Button
-              onClick={() => router.push(`/episode/${result.id}`)}
+              onClick={() => router.push(`/episode/${episodeResult.id}`)}
               className="h-12 flex-1"
             >
               View Full Episode
