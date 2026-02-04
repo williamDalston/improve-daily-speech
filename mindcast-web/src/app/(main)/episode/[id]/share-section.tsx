@@ -6,9 +6,11 @@ interface ShareSectionProps {
   episodeId: string;
   episodeTitle: string;
   transcript?: string;
+  shareId?: string | null;
+  isPublic?: boolean;
 }
 
-export function ShareSection({ episodeId, episodeTitle, transcript }: ShareSectionProps) {
+export function ShareSection({ episodeId, episodeTitle, transcript, shareId, isPublic }: ShareSectionProps) {
   // In production, this would fetch the audio URL from the API/storage
   const audioUrl = `/api/episodes/${episodeId}/audio`;
 
@@ -18,6 +20,8 @@ export function ShareSection({ episodeId, episodeTitle, transcript }: ShareSecti
       episodeTitle={episodeTitle}
       audioSrc={audioUrl}
       transcript={transcript || ''}
+      shareId={shareId}
+      isPublic={isPublic}
     />
   );
 }

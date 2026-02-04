@@ -20,8 +20,8 @@
   ],
   "shortcuts": [
     {
-      "name": "Start Training",
-      "short_name": "Train",
+      "name": "Create Episode",
+      "short_name": "Create",
       "description": "Create a new audio lesson",
       "url": "/create"
     },
@@ -30,6 +30,12 @@
       "short_name": "Library",
       "description": "View your episodes",
       "url": "/library"
+    },
+    {
+      "name": "Instant Reflect",
+      "short_name": "Reflect",
+      "description": "Start an instant conversation",
+      "url": "/reflect"
     }
   ],
   "related_applications": [],

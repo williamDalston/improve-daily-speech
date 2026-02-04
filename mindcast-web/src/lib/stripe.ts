@@ -173,9 +173,41 @@ export async function createPortalSession(userId: string): Promise<string> {
 }
 
 /**
- * Handle Stripe webhook events
+ * Check if webhook event was already processed (idempotency)
+ */
+async function isEventProcessed(eventId: string): Promise<boolean> {
+  const existing = await db.processedWebhookEvent.findUnique({
+    where: { id: eventId },
+  });
+  return !!existing;
+}
+
+/**
+ * Mark webhook event as processed
+ */
+async function markEventProcessed(eventId: string, type: string): Promise<void> {
+  await db.processedWebhookEvent.create({
+    data: { id: eventId, type },
+  });
+
+  // Clean up old events (keep last 30 days)
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  await db.processedWebhookEvent.deleteMany({
+    where: { createdAt: { lt: thirtyDaysAgo } },
+  });
+}
+
+/**
+ * Handle Stripe webhook events with idempotency
  */
 export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
+  // Check idempotency - skip if already processed
+  if (await isEventProcessed(event.id)) {
+    console.log(`Webhook event ${event.id} already processed, skipping`);
+    return;
+  }
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -229,4 +261,7 @@ export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
       break;
     }
   }
+
+  // Mark event as processed for idempotency
+  await markEventProcessed(event.id, event.type);
 }

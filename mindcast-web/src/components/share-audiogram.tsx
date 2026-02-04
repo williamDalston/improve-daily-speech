@@ -13,6 +13,8 @@ import {
   Link2,
   Scissors,
   Sparkles,
+  Globe,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -23,6 +25,8 @@ interface ShareAudiogramProps {
   transcript: string;
   episodeTitle: string;
   episodeId: string;
+  initialShareId?: string | null;
+  initialIsPublic?: boolean;
   className?: string;
   onClose?: () => void;
 }
@@ -87,6 +91,8 @@ export function ShareAudiogramModal({
   transcript,
   episodeTitle,
   episodeId,
+  initialShareId,
+  initialIsPublic = false,
   className,
   onClose,
 }: ShareAudiogramProps) {
@@ -97,7 +103,11 @@ export function ShareAudiogramModal({
   const [clipEnd, setClipEnd] = React.useState(30);
   const [selectedStyle, setSelectedStyle] = React.useState(CARD_STYLES[0]);
   const [copied, setCopied] = React.useState(false);
+  const [publicLinkCopied, setPublicLinkCopied] = React.useState(false);
   const [isGenerating, setIsGenerating] = React.useState(false);
+  const [shareId, setShareId] = React.useState<string | null>(initialShareId || null);
+  const [isPublic, setIsPublic] = React.useState(initialIsPublic);
+  const [isTogglingPublic, setIsTogglingPublic] = React.useState(false);
 
   // Max clip length is 30 seconds (optimal for social sharing)
   const MAX_CLIP_LENGTH = 30;
@@ -195,6 +205,46 @@ export function ShareAudiogramModal({
     await new Promise((resolve) => setTimeout(resolve, 2000));
     setIsGenerating(false);
     // Download would happen here
+  };
+
+  const togglePublicLink = async () => {
+    setIsTogglingPublic(true);
+    try {
+      if (isPublic && shareId) {
+        // Make private
+        const res = await fetch(`/api/episodes/${episodeId}/share`, {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+          setIsPublic(false);
+          setShareId(null);
+        }
+      } else {
+        // Make public
+        const res = await fetch(`/api/episodes/${episodeId}/share`, {
+          method: 'POST',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setShareId(data.shareId);
+          setIsPublic(true);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle public link:', error);
+    } finally {
+      setIsTogglingPublic(false);
+    }
+  };
+
+  const publicShareUrl = shareId ? `${window.location.origin}/share/${shareId}` : null;
+
+  const copyPublicLink = async () => {
+    if (publicShareUrl) {
+      await navigator.clipboard.writeText(publicShareUrl);
+      setPublicLinkCopied(true);
+      setTimeout(() => setPublicLinkCopied(false), 2000);
+    }
   };
 
   const clipDuration = clipEnd - clipStart;
@@ -399,6 +449,61 @@ export function ShareAudiogramModal({
               </Button>
             </div>
           </div>
+
+          {/* Public Link Section */}
+          <div className="space-y-3 border-t border-border pt-6">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-text-primary flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                Public Link
+              </label>
+              <span className="text-xs text-text-muted">Anyone with the link can listen</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                variant={isPublic ? 'default' : 'outline'}
+                onClick={togglePublicLink}
+                disabled={isTogglingPublic}
+                className="flex items-center gap-2"
+              >
+                {isTogglingPublic ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                ) : isPublic ? (
+                  <Lock className="h-4 w-4" />
+                ) : (
+                  <Globe className="h-4 w-4" />
+                )}
+                {isTogglingPublic ? 'Updating...' : isPublic ? 'Make Private' : 'Generate Public Link'}
+              </Button>
+
+              {isPublic && publicShareUrl && (
+                <Button
+                  variant="outline"
+                  onClick={copyPublicLink}
+                  className="flex items-center gap-2 flex-1"
+                >
+                  {publicLinkCopied ? (
+                    <>
+                      <Check className="h-4 w-4 text-success" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4" />
+                      Copy Public Link
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+
+            {isPublic && publicShareUrl && (
+              <div className="rounded-lg bg-surface-secondary p-3">
+                <code className="text-xs text-text-muted break-all">{publicShareUrl}</code>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -429,12 +534,16 @@ export function ShareButton({
   episodeTitle,
   audioSrc,
   transcript,
+  shareId,
+  isPublic,
   className,
 }: {
   episodeId: string;
   episodeTitle: string;
   audioSrc: string;
   transcript: string;
+  shareId?: string | null;
+  isPublic?: boolean;
   className?: string;
 }) {
   const [showModal, setShowModal] = React.useState(false);
@@ -456,6 +565,8 @@ export function ShareButton({
           episodeTitle={episodeTitle}
           audioSrc={audioSrc}
           transcript={transcript}
+          initialShareId={shareId}
+          initialIsPublic={isPublic}
           onClose={() => setShowModal(false)}
         />
       )}

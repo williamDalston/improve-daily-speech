@@ -202,7 +202,19 @@ export function LearningLoop({
     setCurrentStep('complete');
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    // Persist XP to server
+    if (xpEarned > 0) {
+      try {
+        await fetch('/api/user/xp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: xpEarned }),
+        });
+      } catch (err) {
+        console.error('Failed to save XP:', err);
+      }
+    }
     onComplete?.();
   };
 

@@ -24,7 +24,18 @@
       "Bash(ls:*)",
       "Bash(npm install:*)",
       "Bash(node -e:*)",
-      "Bash(npx vercel:*)"
+      "Bash(npx vercel:*)",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 45\")",
+      "Bash(powershell:*)",
+      "Bash(npm info:*)",
+      "Bash(npm view:*)",
+      "Bash(curl:*)",
+      "Bash(surprising\", \"Why does this matter?\"\n- Follow-up prompts: \"Tell me more\", \"Can you give an example?\", etc.\n- Updated header text to \"Your turn to chat!\" with \"Ask anything or tap)",
+      "Bash(a suggestion\" subtitle\n\nUsers can tap these suggestions to instantly send them, speak their own\nquestion, or type instead. This fixes the issue where the host went\nsilent after intro and users didn''t know what to say.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(npx prisma db push:*)",
+      "Bash(head:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npx next build:*)"
     ]
   }
 }

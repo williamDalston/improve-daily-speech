@@ -4,10 +4,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signIn, signOut, useSession } from 'next-auth/react';
 import { Menu, X, User, LogOut, CreditCard, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn, getInitials } from '@/lib/utils';
+import { StreakBadgeCompact } from './streak-badge';
+import { KeyboardShortcutsIndicator } from './keyboard-shortcuts-help';
+import { useShortcuts } from './shortcuts-provider';
 
 const navLinks = [
   { href: '/create', label: 'Create' },
@@ -19,8 +22,31 @@ export function Navbar() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [streakInfo, setStreakInfo] = useState<{ currentStreak: number; totalXp: number } | null>(null);
+  const { setShowHelp } = useShortcuts();
 
   const isActive = (href: string) => pathname === href;
+
+  // Close menus when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setUserMenuOpen(false);
+  }, [pathname]);
+
+  // Fetch streak info when user is logged in
+  useEffect(() => {
+    if (session?.user) {
+      fetch('/api/user/streak')
+        .then(res => res.json())
+        .then(data => {
+          setStreakInfo({ currentStreak: data.currentStreak, totalXp: data.totalXp });
+        })
+        .catch(() => {
+          // Silently fail
+        });
+    }
+  }, [session]);
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-surface/80 backdrop-blur-lg">
@@ -50,6 +76,9 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
+            <div className="ml-2">
+              <KeyboardShortcutsIndicator onClick={() => setShowHelp(true)} />
+            </div>
           </div>
 
           {/* Auth / User */}
@@ -58,13 +87,27 @@ export function Navbar() {
               <div className="h-8 w-20 animate-shimmer rounded-lg" />
             ) : session?.user ? (
               <div className="flex items-center gap-3">
+                {/* Streak Badge */}
+                {streakInfo && (
+                  <div className="hidden sm:block">
+                    <StreakBadgeCompact
+                      currentStreak={streakInfo.currentStreak}
+                      totalXp={streakInfo.totalXp}
+                    />
+                  </div>
+                )}
                 {session.user.isPro && (
                   <Badge variant="default" className="hidden sm:flex">
                     Pro
                   </Badge>
                 )}
-                <div className="relative group">
-                  <button className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-brand/10 text-sm font-medium text-brand transition-colors hover:bg-brand/20 active:bg-brand/30 touch-manipulation">
+                <div className="relative">
+                  <button
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-brand/10 text-sm font-medium text-brand transition-colors hover:bg-brand/20 active:bg-brand/30 touch-manipulation"
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="true"
+                  >
                     {session.user.image ? (
                       <img
                         src={session.user.image}
@@ -75,33 +118,46 @@ export function Navbar() {
                       getInitials(session.user.name || 'U')
                     )}
                   </button>
-                  {/* Dropdown */}
-                  <div className="absolute right-0 top-full mt-2 hidden w-48 rounded-xl border border-border bg-surface p-1 shadow-medium group-hover:block">
-                    <div className="border-b border-border px-3 py-2">
-                      <p className="text-body-sm font-medium text-text-primary">
-                        {session.user.name}
-                      </p>
-                      <p className="text-caption text-text-muted">
-                        {session.user.email}
-                      </p>
-                    </div>
-                    {!session.user.isPro && (
-                      <Link
-                        href="/pricing"
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-body-sm text-text-secondary hover:bg-surface-tertiary"
-                      >
-                        <CreditCard className="h-4 w-4" />
-                        Upgrade to Pro
-                      </Link>
-                    )}
-                    <button
-                      onClick={() => signOut()}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-body-sm text-text-secondary hover:bg-surface-tertiary"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Sign out
-                    </button>
-                  </div>
+                  {/* Dropdown - click to toggle */}
+                  {userMenuOpen && (
+                    <>
+                      {/* Backdrop for closing */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setUserMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 top-full mt-2 z-50 w-56 rounded-xl border border-border bg-surface p-1 shadow-medium animate-fade-in">
+                        <div className="border-b border-border px-3 py-2">
+                          <p className="text-body-sm font-medium text-text-primary truncate">
+                            {session.user.name}
+                          </p>
+                          <p className="text-caption text-text-muted truncate">
+                            {session.user.email}
+                          </p>
+                        </div>
+                        {!session.user.isPro && (
+                          <Link
+                            href="/pricing"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="flex items-center gap-2 rounded-lg px-3 py-3 text-body-sm text-text-secondary hover:bg-surface-tertiary active:bg-surface-secondary"
+                          >
+                            <CreditCard className="h-4 w-4" />
+                            Upgrade to Pro
+                          </Link>
+                        )}
+                        <button
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            signOut();
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-3 text-body-sm text-text-secondary hover:bg-surface-tertiary active:bg-surface-secondary"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Sign out
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
@@ -128,6 +184,22 @@ export function Navbar() {
         {/* Mobile Nav */}
         {mobileMenuOpen && (
           <div className="border-t border-border py-4 md:hidden">
+            {/* Streak info on mobile */}
+            {streakInfo && streakInfo.currentStreak > 0 && (
+              <div className="mb-3 px-4">
+                <div className="flex items-center justify-between rounded-lg bg-surface-secondary p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🔥</span>
+                    <span className="text-body-sm font-medium text-text-primary">
+                      {streakInfo.currentStreak} day streak
+                    </span>
+                  </div>
+                  <span className="text-body-sm text-text-muted">
+                    {streakInfo.totalXp.toLocaleString()} XP
+                  </span>
+                </div>
+              </div>
+            )}
             <div className="flex flex-col gap-1">
               {navLinks.map((link) => (
                 <Link
@@ -135,7 +207,7 @@ export function Navbar() {
                   href={link.href}
                   onClick={() => setMobileMenuOpen(false)}
                   className={cn(
-                    'rounded-lg px-4 py-3 text-body-md font-medium transition-colors',
+                    'rounded-lg px-4 py-3 text-body-md font-medium transition-colors active:bg-surface-secondary',
                     isActive(link.href)
                       ? 'bg-brand/10 text-brand'
                       : 'text-text-secondary hover:bg-surface-tertiary'

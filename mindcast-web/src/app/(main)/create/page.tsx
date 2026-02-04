@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useDevice } from '@/hooks/use-device';
 import {
   Sparkles,
   Loader2,
   Check,
-  AlertCircle,
   Lightbulb,
   Zap,
   Clock,
@@ -24,6 +24,8 @@ import {
   User,
   ChevronDown,
   ChevronUp,
+  Volume2,
+  Square,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,6 +34,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { AudioPlayer } from '@/components/audio-player';
 import { FootprintsDisplay } from '@/components/footprints-display';
+import { ErrorAlert } from '@/components/error-state';
 import { InstantHost } from '@/components/instant-host';
 import { cn } from '@/lib/utils';
 
@@ -218,6 +221,46 @@ const CONTENT_CONSTRAINTS = [
   },
 ];
 
+// Voice Options - OpenAI TTS voices for episode narration
+const VOICE_OPTIONS = [
+  {
+    id: 'nova',
+    label: 'Nova',
+    description: 'Warm & friendly',
+    emoji: '🎙️',
+  },
+  {
+    id: 'alloy',
+    label: 'Alloy',
+    description: 'Neutral & balanced',
+    emoji: '🔊',
+  },
+  {
+    id: 'echo',
+    label: 'Echo',
+    description: 'Clear & resonant',
+    emoji: '📢',
+  },
+  {
+    id: 'fable',
+    label: 'Fable',
+    description: 'Expressive & storytelling',
+    emoji: '📖',
+  },
+  {
+    id: 'onyx',
+    label: 'Onyx',
+    description: 'Deep & authoritative',
+    emoji: '🎭',
+  },
+  {
+    id: 'shimmer',
+    label: 'Shimmer',
+    description: 'Bright & engaging',
+    emoji: '✨',
+  },
+];
+
 // Style Lenses - change the AI's perspective/tone (from UX Blueprint)
 const STYLE_LENSES = [
   {
@@ -276,10 +319,14 @@ const PIPELINE_STEPS: PipelineStep[] = [
 export default function CreatePage() {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
+  const { type: deviceType } = useDevice();
 
   const [topic, setTopic] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState('balanced');
+  const [selectedVoice, setSelectedVoice] = useState('nova');
+  const [playingPreview, setPlayingPreview] = useState<string | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedIntent, setSelectedIntent] = useState<string | null>(null);
   const [selectedLevel, setSelectedLevel] = useState('intermediate');
   const [selectedConstraints, setSelectedConstraints] = useState<string[]>([]);
@@ -644,11 +691,11 @@ export default function CreatePage() {
     setSteps(PIPELINE_STEPS.map((s) => ({ ...s, status: 'pending' })));
 
     try {
-      // Create job via API
+      // Create job via API - pass device type for TTS optimization
       const response = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: fullTopic, length, style: stylePrompt, mode: generationMode }),
+        body: JSON.stringify({ topic: fullTopic, length, style: stylePrompt, mode: generationMode, voice: selectedVoice, deviceType }),
         signal: abortControllerRef.current.signal,
       });
 
@@ -677,7 +724,7 @@ export default function CreatePage() {
       setError(errorMessage);
       setIsGenerating(false);
     }
-  }, [topic, length, session, router, selectedTemplate, selectedStyle, selectedIntent, selectedLevel, selectedConstraints, personalContext, generationMode, pollJobStatus]);
+  }, [topic, length, session, router, selectedTemplate, selectedStyle, selectedIntent, selectedLevel, selectedConstraints, personalContext, generationMode, selectedVoice, deviceType, pollJobStatus]);
 
   // Keep ref updated for auto-generate after login
   useEffect(() => {
@@ -703,6 +750,41 @@ export default function CreatePage() {
     setCurrentJobId(null);
     setError('Generation cancelled');
   }, [currentJobId]);
+
+  // Voice preview handler
+  const playVoicePreview = useCallback((voiceId: string) => {
+    // Stop any currently playing preview
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+
+    // If clicking the same voice that's playing, just stop
+    if (playingPreview === voiceId) {
+      setPlayingPreview(null);
+      return;
+    }
+
+    // Play the new preview
+    const audio = new Audio(`/api/voice-preview?voice=${voiceId}`);
+    previewAudioRef.current = audio;
+    setPlayingPreview(voiceId);
+
+    audio.onended = () => {
+      setPlayingPreview(null);
+      previewAudioRef.current = null;
+    };
+
+    audio.onerror = () => {
+      setPlayingPreview(null);
+      previewAudioRef.current = null;
+    };
+
+    audio.play().catch(() => {
+      setPlayingPreview(null);
+      previewAudioRef.current = null;
+    });
+  }, [playingPreview]);
 
   if (sessionStatus === 'loading') {
     return (
@@ -974,6 +1056,62 @@ export default function CreatePage() {
                   </div>
                 </div>
 
+                {/* Voice Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-muted">
+                    Narrator Voice
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {VOICE_OPTIONS.map((voice) => (
+                      <div key={voice.id} className="relative">
+                        <button
+                          onClick={() => setSelectedVoice(voice.id)}
+                          className={cn(
+                            'flex w-full flex-col items-center gap-1 rounded-xl border p-3 text-center transition-all active:scale-95',
+                            'touch-manipulation',
+                            selectedVoice === voice.id
+                              ? 'border-brand bg-brand/10'
+                              : 'border-border hover:border-brand/50'
+                          )}
+                        >
+                          <span className="text-lg">{voice.emoji}</span>
+                          <span className={cn(
+                            'text-sm font-medium',
+                            selectedVoice === voice.id ? 'text-brand' : 'text-text-primary'
+                          )}>
+                            {voice.label}
+                          </span>
+                          <span className="text-xs text-text-muted">{voice.description}</span>
+                        </button>
+                        {/* Preview button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            playVoicePreview(voice.id);
+                          }}
+                          className={cn(
+                            'absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm transition-all',
+                            'bg-surface hover:bg-surface-secondary active:scale-90',
+                            playingPreview === voice.id
+                              ? 'border-brand text-brand'
+                              : 'border-border text-text-muted hover:text-text-primary'
+                          )}
+                          title={playingPreview === voice.id ? 'Stop preview' : 'Preview voice'}
+                        >
+                          {playingPreview === voice.id ? (
+                            <Square className="h-3 w-3 fill-current" />
+                          ) : (
+                            <Volume2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-text-muted text-center">
+                    Tap the speaker icon to preview each voice
+                  </p>
+                </div>
+
                 {/* Make It About Me - Personalization */}
                 <div className="space-y-2">
                   <button
@@ -1110,10 +1248,10 @@ export default function CreatePage() {
 
             {/* Error */}
             {error && (
-              <div className="flex items-center gap-2 rounded-xl bg-error/10 p-4 text-error">
-                <AlertCircle className="h-5 w-5 shrink-0" />
-                <p className="text-sm">{error}</p>
-              </div>
+              <ErrorAlert
+                message={error}
+                onDismiss={() => setError(null)}
+              />
             )}
 
             {/* Loading State - Enhanced */}

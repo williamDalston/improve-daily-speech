@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limiting
-  const rateLimit = checkRateLimit(session.user.id, rateLimits.dailyDrop);
+  const rateLimit = await checkRateLimit(session.user.id, rateLimits.dailyDrop);
   if (!rateLimit.success) {
     return rateLimitedResponse(rateLimit);
   }

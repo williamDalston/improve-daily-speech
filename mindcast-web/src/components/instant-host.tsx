@@ -1,8 +1,89 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, Square, Waves, Send, ChevronDown, ChevronUp, Brain, Check, X } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Loader2, Sparkles, Square, Waves, Send, ChevronDown, ChevronUp, Brain, Check, X, History, Trash2, Keyboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useDevice } from '@/hooks/use-device';
+
+// Haptic feedback for mobile
+function triggerHaptic(style: 'light' | 'medium' | 'heavy' = 'light') {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    const patterns = { light: 10, medium: 25, heavy: 50 };
+    navigator.vibrate(patterns[style]);
+  }
+}
+
+// Conversation memory utilities
+const CONVERSATION_STORAGE_KEY = 'mindcast_instant_host_conversations';
+const MAX_STORED_CONVERSATIONS = 20;
+
+interface StoredConversation {
+  topic: string;
+  topicNormalized: string;
+  history: Array<{role: 'host' | 'user', text: string}>;
+  lastUpdated: number;
+}
+
+function normalizeTopicKey(topic: string): string {
+  return topic.toLowerCase().trim().replace(/\s+/g, '_').slice(0, 100);
+}
+
+function loadConversations(): StoredConversation[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(CONVERSATION_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveConversations(conversations: StoredConversation[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    // Keep only the most recent conversations
+    const trimmed = conversations
+      .sort((a, b) => b.lastUpdated - a.lastUpdated)
+      .slice(0, MAX_STORED_CONVERSATIONS);
+    localStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+function getConversationForTopic(topic: string): StoredConversation | null {
+  const conversations = loadConversations();
+  const key = normalizeTopicKey(topic);
+  return conversations.find(c => c.topicNormalized === key) || null;
+}
+
+function saveConversationForTopic(topic: string, history: Array<{role: 'host' | 'user', text: string}>): void {
+  const conversations = loadConversations();
+  const key = normalizeTopicKey(topic);
+  const existing = conversations.findIndex(c => c.topicNormalized === key);
+
+  const newConversation: StoredConversation = {
+    topic,
+    topicNormalized: key,
+    history: history.slice(-20), // Keep last 20 messages
+    lastUpdated: Date.now(),
+  };
+
+  if (existing >= 0) {
+    conversations[existing] = newConversation;
+  } else {
+    conversations.push(newConversation);
+  }
+
+  saveConversations(conversations);
+}
+
+function deleteConversationForTopic(topic: string): void {
+  const conversations = loadConversations();
+  const key = normalizeTopicKey(topic);
+  const filtered = conversations.filter(c => c.topicNormalized !== key);
+  saveConversations(filtered);
+}
 
 interface InstantHostProps {
   topic: string;
@@ -72,6 +153,7 @@ export function InstantHost({
   episodeReady,
   onReadyToPlay,
 }: InstantHostProps) {
+  const { type: deviceType, isMobile } = useDevice();
   const [phase, setPhase] = useState<HostPhase>('idle');
   const [currentText, setCurrentText] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -90,7 +172,9 @@ export function InstantHost({
   const [textInput, setTextInput] = useState('');
   const [showTextInput, setShowTextInput] = useState(false); // Alternative to voice
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'host' | 'user', text: string}>>([]);
-  const [showTranscript, setShowTranscript] = useState(false); // Collapsed by default so audio feels central;
+  const [showTranscript, setShowTranscript] = useState(false); // Collapsed by default so audio feels central
+  const [hasPreviousConversation, setHasPreviousConversation] = useState(false);
+  const [showConversationHistory, setShowConversationHistory] = useState(false);
 
   // Mini-quiz state (collapsible entertainment while waiting)
   interface QuizQuestion {
@@ -115,6 +199,48 @@ export function InstantHost({
   const hasStartedRef = useRef(false);
   const phaseTimerRef = useRef<NodeJS.Timeout | null>(null);
   const phaseCountRef = useRef(0); // Track how many phases we've done
+  const conversationLoadedRef = useRef(false);
+  const textInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Check if chat mode is active (user has chosen to interact)
+  const isChatMode = micPermissionAsked && (micEnabled || showTextInput);
+  // Show sticky chat bar on mobile when in listening phase and chat mode enabled
+  const showStickyBar = isMobile && isChatMode && phase === 'listening' && !episodeReady;
+
+  // Load previous conversation for this topic
+  useEffect(() => {
+    if (conversationLoadedRef.current || !topic) return;
+
+    const previous = getConversationForTopic(topic);
+    if (previous && previous.history.length > 0) {
+      setHasPreviousConversation(true);
+      // Don't auto-load - let user decide to continue or start fresh
+    }
+    conversationLoadedRef.current = true;
+  }, [topic]);
+
+  // Auto-save conversation when it changes
+  useEffect(() => {
+    if (conversationHistory.length > 0 && topic) {
+      saveConversationForTopic(topic, conversationHistory);
+    }
+  }, [conversationHistory, topic]);
+
+  // Load previous conversation
+  const loadPreviousConversation = useCallback(() => {
+    const previous = getConversationForTopic(topic);
+    if (previous) {
+      setConversationHistory(previous.history);
+      setHasPreviousConversation(false);
+    }
+  }, [topic]);
+
+  // Clear conversation history
+  const clearConversationHistory = useCallback(() => {
+    deleteConversationForTopic(topic);
+    setConversationHistory([]);
+    setHasPreviousConversation(false);
+  }, [topic]);
 
   const stopAudioPlayback = useCallback(() => {
     if (audioRef.current) {
@@ -275,6 +401,79 @@ export function InstantHost({
     }
   }, [isStopped, isMuted, micEnabled]);
 
+  // Start a proactive conversation - AI asks the first question immediately
+  const startProactiveConversation = useCallback(async () => {
+    if (isStopped || isMuted) return;
+
+    setPhase('responding');
+    setIsLoadingAudio(true);
+
+    try {
+      // Get AI to ask an engaging question about the topic
+      const response = await fetch('/api/instant-host/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic,
+          userMessage: '__START_CONVERSATION__', // Special flag for initial question
+          conversationHistory: [],
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to get conversation starter');
+
+      const { text } = await response.json();
+      setCurrentText(text);
+      setConversationHistory([{ role: 'host', text }]);
+
+      // Generate TTS for the question (use fast mode on mobile)
+      const ttsResponse = await fetch('/api/instant-host/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, deviceType }),
+      });
+
+      setIsLoadingAudio(false);
+
+      if (ttsResponse.ok) {
+        const audioBlob = await ttsResponse.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        audioUrlRef.current = audioUrl;
+
+        const audio = audioRef.current ?? new Audio();
+        audioRef.current = audio;
+        audio.src = audioUrl;
+
+        audio.onplay = () => setIsPlaying(true);
+        audio.onended = () => {
+          setIsPlaying(false);
+          // After asking question, transition to listening phase
+          if (!isStopped && !episodeReady) {
+            setTimeout(() => {
+              setPhase('listening');
+              // Only start speech recognition if mic is enabled (not text mode)
+              if (micEnabled) {
+                startListening();
+              }
+            }, 300);
+          }
+        };
+        audio.onerror = () => setIsPlaying(false);
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+        await audio.play();
+      }
+    } catch (err) {
+      console.error('Conversation start error:', err);
+      setIsLoadingAudio(false);
+      // Fall back to listening phase (works for both voice and text mode)
+      setPhase('listening');
+      if (micEnabled) {
+        startListening();
+      }
+    }
+  }, [topic, isStopped, isMuted, micEnabled, episodeReady, startListening, deviceType]);
+
   // Pause listening temporarily (for when AI is speaking)
   const pauseListening = useCallback(() => {
     shouldAutoRestartRef.current = false;
@@ -319,12 +518,12 @@ export function InstantHost({
       // Add host response to history
       setConversationHistory(prev => [...prev, { role: 'host', text }]);
 
-      // Generate TTS for response
+      // Generate TTS for response (use fast mode on mobile)
       if (!isMuted) {
         const ttsResponse = await fetch('/api/instant-host/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, deviceType }),
         });
 
         setIsLoadingAudio(false);
@@ -366,7 +565,7 @@ export function InstantHost({
       // Fall back to regular phase flow
       setPhase('curiosity');
     }
-  }, [topic, conversationHistory, isStopped, isMuted, micEnabled, episodeReady, pauseListening, startListening]);
+  }, [topic, conversationHistory, isStopped, isMuted, micEnabled, episodeReady, pauseListening, startListening, deviceType]);
 
   // Keep ref updated with latest handleUserInput (for speech recognition callback)
   useEffect(() => {
@@ -381,8 +580,8 @@ export function InstantHost({
   }, [textInput, handleUserInput]);
 
   // Generate quiz questions for the topic
-  const generateQuiz = useCallback(async () => {
-    if (quizGenerated || quizLoading) return;
+  const generateQuiz = useCallback(async (force = false) => {
+    if ((!force && quizGenerated) || quizLoading) return;
     setQuizLoading(true);
 
     try {
@@ -396,6 +595,9 @@ export function InstantHost({
         const { questions } = await response.json();
         setQuizQuestions(questions);
         setQuizGenerated(true);
+        setCurrentQuizIndex(0);
+        setSelectedAnswer(null);
+        setQuizScore(0);
       }
     } catch (err) {
       console.error('Quiz generation error:', err);
@@ -403,6 +605,15 @@ export function InstantHost({
       setQuizLoading(false);
     }
   }, [topic, quizGenerated, quizLoading]);
+
+  const handleNewQuiz = useCallback(() => {
+    setQuizQuestions([]);
+    setQuizGenerated(false);
+    setCurrentQuizIndex(0);
+    setSelectedAnswer(null);
+    setQuizScore(0);
+    generateQuiz(true);
+  }, [generateQuiz]);
 
   // Handle quiz answer selection
   const handleQuizAnswer = useCallback((answerIndex: number) => {
@@ -497,10 +708,11 @@ export function InstantHost({
         }
       };
 
+      // Use fast TTS on mobile for quicker time-to-first-sound
       const ttsResponse = await fetch('/api/instant-host/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, deviceType }),
       });
 
       setIsLoadingAudio(false);
@@ -548,7 +760,7 @@ export function InstantHost({
       setIsLoadingAudio(false);
       setError('Could not start voice host');
     }
-  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening]);
+  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening, deviceType]);
 
   // Start when generation begins
   useEffect(() => {
@@ -635,7 +847,10 @@ export function InstantHost({
   if (!isGenerating || error) return null;
 
   return (
-    <div className="rounded-xl border-2 border-brand/30 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-4">
+    <div className={cn(
+      "rounded-xl border-2 border-brand/30 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-4",
+      showStickyBar && "pb-2" // Less bottom padding when sticky bar handles input
+    )}>
       {/* Host Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -766,6 +981,85 @@ export function InstantHost({
         </div>
       </div>
 
+      {/* Previous Conversation Banner */}
+      {hasPreviousConversation && conversationHistory.length === 0 && (
+        <div className="rounded-lg bg-brand/10 border border-brand/20 p-3 mb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-brand" />
+              <span className="text-sm text-text-primary">
+                Continue your previous conversation?
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={loadPreviousConversation}
+                className="text-xs px-3 py-1.5 rounded-lg bg-brand text-white hover:bg-brand/90 transition-colors"
+              >
+                Resume
+              </button>
+              <button
+                onClick={() => setHasPreviousConversation(false)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-border text-text-muted hover:bg-surface-secondary transition-colors"
+              >
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conversation History Panel */}
+      {showConversationHistory && conversationHistory.length > 0 && (
+        <div className="rounded-lg bg-surface-secondary border border-border p-3 mb-3 max-h-64 overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-text-muted">Conversation History</span>
+            <button
+              onClick={clearConversationHistory}
+              className="text-xs px-2 py-1 rounded text-error hover:bg-error/10 transition-colors flex items-center gap-1"
+              title="Clear history"
+            >
+              <Trash2 className="h-3 w-3" />
+              Clear
+            </button>
+          </div>
+          <div className="space-y-2">
+            {conversationHistory.map((msg, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  "text-xs px-2 py-1.5 rounded",
+                  msg.role === 'user'
+                    ? "bg-success/10 text-success ml-4"
+                    : "bg-brand/10 text-brand mr-4"
+                )}
+              >
+                <span className="font-medium">{msg.role === 'user' ? 'You' : 'Host'}:</span>{' '}
+                <span className="text-text-secondary">{msg.text.slice(0, 100)}{msg.text.length > 100 ? '...' : ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Conversation Actions */}
+      {conversationHistory.length > 0 && phase !== 'idle' && phase !== 'asking' && (
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            onClick={() => setShowConversationHistory(!showConversationHistory)}
+            className={cn(
+              "text-xs px-3 py-1.5 rounded-lg border transition-colors flex items-center gap-1",
+              showConversationHistory
+                ? "border-brand bg-brand/10 text-brand"
+                : "border-border text-text-muted hover:bg-surface-secondary"
+            )}
+          >
+            <History className="h-3 w-3" />
+            History ({conversationHistory.length})
+          </button>
+        </div>
+      )}
+
       {/* User Speech (when listening) */}
       {(isListening || userSpeech) && phase === 'listening' && (
         <div className="rounded-lg bg-success/10 border border-success/30 p-3 mb-3">
@@ -840,18 +1134,21 @@ export function InstantHost({
               onClick={async () => {
                 const granted = await requestMicPermission();
                 if (granted) {
-                  startListening();
+                  // Start proactive conversation - AI asks first question immediately
+                  startProactiveConversation();
                 }
               }}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand px-3 py-3 text-base text-white font-medium transition-all hover:bg-brand/90 sm:py-2.5 sm:text-sm"
             >
               <Mic className="h-4 w-4" />
-              Enable voice
+              Let's chat
             </button>
             <button
               onClick={() => {
                 setMicPermissionAsked(true);
                 setShowTextInput(true);
+                // Also start proactive conversation for text mode
+                startProactiveConversation();
               }}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-3 text-base text-text-primary font-medium transition-all hover:bg-surface-tertiary sm:py-2.5 sm:text-sm"
             >
@@ -873,8 +1170,8 @@ export function InstantHost({
         </div>
       )}
 
-      {/* Text Input for typing responses */}
-      {showTextInput && phase === 'listening' && micPermissionAsked && (
+      {/* Text Input for typing responses (desktop only when sticky bar is active on mobile) */}
+      {showTextInput && phase === 'listening' && micPermissionAsked && !showStickyBar && (
         <div className="mt-3 space-y-3">
           {/* Conversation prompts for text input */}
           {conversationHistory.length === 0 && (
@@ -945,8 +1242,8 @@ export function InstantHost({
         </div>
       )}
 
-      {/* Voice listening state */}
-      {micEnabled && phase === 'listening' && micPermissionAsked && !showTextInput && (
+      {/* Voice listening state (desktop only when sticky bar is active on mobile) */}
+      {micEnabled && phase === 'listening' && micPermissionAsked && !showTextInput && !showStickyBar && (
         <div className="mt-3 space-y-3">
           {/* Conversation prompts - help user know what to say */}
           {!isListening && conversationHistory.length === 0 && (
@@ -1056,8 +1353,8 @@ export function InstantHost({
         </div>
       )}
 
-      {/* Collapsible Mini-Quiz - entertainment while waiting */}
-      {!episodeReady && phase !== 'asking' && phase !== 'idle' && (
+      {/* Collapsible Mini-Quiz - entertainment while waiting (hidden on mobile when sticky bar is shown) */}
+      {!episodeReady && phase !== 'asking' && phase !== 'idle' && !showStickyBar && (
         <div className="mt-4 border-t border-border pt-4">
           <button
             onClick={() => {
@@ -1155,9 +1452,17 @@ export function InstantHost({
                           Next Question →
                         </button>
                       ) : (
-                        <p className="text-center text-sm text-text-muted py-2">
-                          Quiz complete! Final score: {quizScore}/{quizQuestions.length}
-                        </p>
+                        <div className="space-y-3">
+                          <p className="text-center text-sm text-text-muted">
+                            Quiz complete! Final score: {quizScore}/{quizQuestions.length}
+                          </p>
+                          <button
+                            onClick={handleNewQuiz}
+                            className="w-full py-2 text-sm font-medium text-brand hover:bg-brand/10 rounded-lg transition-colors"
+                          >
+                            New Quiz →
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -1169,6 +1474,144 @@ export function InstantHost({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Spacer for mobile sticky bar */}
+      {showStickyBar && <div className="h-24" />}
+
+      {/* Mobile Sticky Chat Bar - Fixed bottom input for mobile */}
+      {showStickyBar && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/95 backdrop-blur-sm"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <div className="px-4 py-3">
+            {/* Quick prompts row */}
+            <div
+              className="flex gap-2 mb-3 overflow-x-auto pb-1"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {(conversationHistory.length === 0
+                ? ['What fascinates you?', 'Tell me something surprising', 'Why does this matter?']
+                : ['Tell me more', 'Give an example', 'What else?']
+              ).map((prompt, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    triggerHaptic('light');
+                    handleUserInput(prompt);
+                  }}
+                  className="flex-shrink-0 text-sm px-4 py-2 rounded-full border border-brand/30 text-brand hover:bg-brand/10 active:scale-95 transition-all"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
+            {/* Input row */}
+            <div className="flex items-center gap-3">
+              {/* Mode toggle button */}
+              <button
+                onClick={() => {
+                  triggerHaptic('light');
+                  if (showTextInput) {
+                    setShowTextInput(false);
+                    if (micEnabled) startListening();
+                  } else {
+                    pauseListening();
+                    setShowTextInput(true);
+                    // Auto-focus text input
+                    setTimeout(() => textInputRef.current?.focus(), 100);
+                  }
+                }}
+                className={cn(
+                  "flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-full transition-all active:scale-95",
+                  showTextInput
+                    ? "bg-surface-secondary text-text-muted"
+                    : "bg-brand/10 text-brand"
+                )}
+                aria-label={showTextInput ? "Switch to voice" : "Switch to typing"}
+              >
+                {showTextInput ? <Mic className="h-5 w-5" /> : <Keyboard className="h-5 w-5" />}
+              </button>
+
+              {showTextInput ? (
+                /* Text input mode */
+                <>
+                  <input
+                    ref={textInputRef}
+                    type="text"
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && textInput.trim()) {
+                        triggerHaptic('medium');
+                        handleTextSubmit();
+                      }
+                    }}
+                    placeholder="Type your question..."
+                    className="flex-1 h-12 rounded-full border border-border bg-surface-secondary px-4 text-base text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand/30"
+                  />
+                  <button
+                    onClick={() => {
+                      if (textInput.trim()) {
+                        triggerHaptic('medium');
+                        handleTextSubmit();
+                      }
+                    }}
+                    disabled={!textInput.trim()}
+                    className="flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-full bg-brand text-white disabled:opacity-50 transition-all active:scale-95"
+                    aria-label="Send"
+                  >
+                    <Send className="h-5 w-5" />
+                  </button>
+                </>
+              ) : (
+                /* Voice input mode */
+                <button
+                  onClick={() => {
+                    triggerHaptic('medium');
+                    if (isListening) {
+                      pauseListening();
+                    } else {
+                      startListening();
+                    }
+                  }}
+                  className={cn(
+                    "flex-1 h-14 flex items-center justify-center gap-3 rounded-full font-medium text-base transition-all active:scale-[0.98]",
+                    isListening
+                      ? "bg-success text-white"
+                      : "bg-brand text-white"
+                  )}
+                >
+                  {isListening ? (
+                    <>
+                      <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
+                      <span>{userSpeech || 'Listening...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-5 w-5" />
+                      <span>Tap to speak</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {/* Skip option */}
+            <button
+              onClick={() => {
+                stopListening();
+                const nextPhase = phaseCountRef.current < 2 ? 'deep_dive' : 'curiosity';
+                generateAndSpeak(nextPhase);
+              }}
+              className="w-full text-sm text-text-muted hover:text-text-secondary text-center py-2 mt-2"
+            >
+              Skip — continue listening
+            </button>
+          </div>
         </div>
       )}
     </div>

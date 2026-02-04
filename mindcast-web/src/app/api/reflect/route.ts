@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limiting
-  const rateLimit = checkRateLimit(session.user.id, rateLimits.reflect);
+  const rateLimit = await checkRateLimit(session.user.id, rateLimits.reflect);
   if (!rateLimit.success) {
     return rateLimitedResponse(rateLimit);
   }

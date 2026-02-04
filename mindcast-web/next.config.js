@@ -2,8 +2,9 @@ const { withSentryConfig } = require('@sentry/nextjs');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Enable server actions for AI pipeline
+  // Enable instrumentation for env validation at startup
   experimental: {
+    instrumentationHook: true,
     serverActions: {
       bodySizeLimit: '10mb', // For audio uploads
     },
@@ -19,15 +20,64 @@ const nextConfig = {
     ],
   },
 
-  // Headers for audio streaming
+  // Security and caching headers
   async headers() {
+    const securityHeaders = [
+      {
+        key: 'X-DNS-Prefetch-Control',
+        value: 'on',
+      },
+      {
+        key: 'Strict-Transport-Security',
+        value: 'max-age=63072000; includeSubDomains; preload',
+      },
+      {
+        key: 'X-Frame-Options',
+        value: 'SAMEORIGIN',
+      },
+      {
+        key: 'X-Content-Type-Options',
+        value: 'nosniff',
+      },
+      {
+        key: 'X-XSS-Protection',
+        value: '1; mode=block',
+      },
+      {
+        key: 'Referrer-Policy',
+        value: 'strict-origin-when-cross-origin',
+      },
+      {
+        key: 'Permissions-Policy',
+        value: 'camera=(), microphone=(self), geolocation=()',
+      },
+    ];
+
     return [
       {
+        // Apply security headers to all routes
+        source: '/:path*',
+        headers: securityHeaders,
+      },
+      {
+        // Audio streaming cache headers
         source: '/api/audio/:path*',
         headers: [
+          ...securityHeaders,
           {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        // API routes - no caching
+        source: '/api/:path*',
+        headers: [
+          ...securityHeaders,
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate',
           },
         ],
       },

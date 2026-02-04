@@ -4,27 +4,27 @@ import { Button } from '@/components/ui/button';
 
 export default function HomePage() {
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center animate-fade-in">
       {/* Hero */}
       <section className="py-16 text-center md:py-24">
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-body-sm text-brand">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-body-sm text-brand animate-fade-in-up" style={{ animationDelay: '100ms' }}>
           <Sparkles className="h-4 w-4" />
           Your Personal Mind Dojo
         </div>
 
-        <h1 className="mb-6 text-display-lg text-text-primary md:text-[4rem]">
+        <h1 className="mb-6 text-display-lg text-text-primary md:text-[4rem] animate-fade-in-up" style={{ animationDelay: '200ms' }}>
           Sharpen Your Mind{' '}
           <span className="bg-brand-gradient bg-clip-text text-transparent">
             On Any Topic
           </span>
         </h1>
 
-        <p className="mx-auto mb-8 max-w-2xl text-body-lg text-text-secondary">
+        <p className="mx-auto mb-8 max-w-2xl text-body-lg text-text-secondary animate-fade-in-up" style={{ animationDelay: '300ms' }}>
           Turn any subject into an audio lesson that actually sticks.
           Learn while you commute, exercise, or relax — and watch your knowledge grow.
         </p>
 
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center animate-fade-in-up" style={{ animationDelay: '400ms' }}>
           <Link href="/create">
             <Button size="lg" className="min-w-[180px]">
               Start Training

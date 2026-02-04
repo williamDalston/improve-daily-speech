@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limiting
-  const rateLimit = checkRateLimit(session.user.id, rateLimits.addon);
+  const rateLimit = await checkRateLimit(session.user.id, rateLimits.addon);
   if (!rateLimit.success) {
     return rateLimitedResponse(rateLimit);
   }

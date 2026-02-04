@@ -12,6 +12,19 @@ datasource db {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// WEBHOOK IDEMPOTENCY
+// ══════════════════════════════════════════════════════════════════════════════
+
+model ProcessedWebhookEvent {
+  id        String   @id // Stripe event ID
+  type      String   // Event type for debugging
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("processed_webhook_events")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // AUTH MODELS (NextAuth)
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -93,6 +106,9 @@ model User {
   narratorTone    String?   @map("narrator_tone") // "bbc_calm", "playful_professor", "no_fluff"
   lastDailyDrop   DateTime? @map("last_daily_drop") // When last Daily Drop was generated
 
+  // RSS Feed (private token for podcast apps)
+  feedToken       String?   @unique @map("feed_token") // Secure token for RSS feed access
+
   // Relations
   accounts  Account[]
   sessions  Session[]
@@ -121,6 +137,11 @@ model Episode {
   transcript  String?  @db.Text
   audioUrl    String?  @map("audio_url")
   audioDurationSecs Int? @map("audio_duration_secs")
+  voice       String   @default("nova") // TTS voice used: nova, alloy, echo, fable, onyx, shimmer
+
+  // Sharing
+  shareId     String?  @unique @map("share_id") // Public share ID for unauthenticated access
+  isPublic    Boolean  @default(false) @map("is_public") // Whether episode is publicly shareable
 
   // AI Pipeline stages
   rawContent       String? @map("raw_content") @db.Text
@@ -133,13 +154,22 @@ model Episode {
   wordCount Int?          @map("word_count")
   sources   Json?         // Array of source citations
 
+  // Spaced Repetition
+  lastListenedAt   DateTime? @map("last_listened_at")
+  lastReviewedAt   DateTime? @map("last_reviewed_at")
+  nextReviewAt     DateTime? @map("next_review_at")
+  reviewCount      Int       @default(0) @map("review_count")
+  reviewInterval   Int       @default(1) @map("review_interval") // Days until next review
+
   // Relations
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   reflects         Reflect[]
   job              Job?
   playlistEpisodes PlaylistEpisode[]
+  reviews          EpisodeReview[]
 
   @@index([userId, createdAt])
+  @@index([userId, nextReviewAt])
   @@map("episodes")
 }
 
@@ -165,6 +195,7 @@ model Job {
   topic  String
   length String @default("10 min")
   style  String? // Style lens prompt (academic, conversational, skeptical, enthusiastic)
+  voice  String @default("nova") // TTS voice: nova, alloy, echo, fable, onyx, shimmer
 
   // Status tracking
   status       JobStatus @default(PENDING)
@@ -276,4 +307,25 @@ model PlaylistEpisode {
   @@unique([playlistId, episodeId])
   @@index([playlistId, position])
   @@map("playlist_episodes")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EPISODE REVIEW MODEL (Spaced Repetition tracking)
+// ══════════════════════════════════════════════════════════════════════════════
+
+model EpisodeReview {
+  id        String   @id @default(cuid())
+  episodeId String   @map("episode_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Review data
+  quality     Int      // 1-5 rating of recall quality
+  quizScore   Int?     @map("quiz_score") // Quiz score if taken (0-100)
+  timeTaken   Int?     @map("time_taken") // Seconds spent reviewing
+
+  // Relations
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@index([episodeId, createdAt])
+  @@map("episode_reviews")
 }

@@ -69,6 +69,7 @@ export interface GenerateAudioOptions {
   stability?: number; // ElevenLabs: 0-1, higher = more stable
   similarityBoost?: number; // ElevenLabs: 0-1, higher = more similar to original
   fastMode?: boolean; // Use tts-1 (faster) instead of tts-1-hd (better quality)
+  parallelChunks?: boolean; // Process chunks in parallel (faster but uses more API calls concurrently)
 }
 
 // ============================================================================
@@ -265,20 +266,63 @@ async function generateWithGoogle(
 // OpenAI TTS (Premium Quality)
 // ============================================================================
 
+/**
+ * Process chunks in parallel with controlled concurrency
+ * Maintains order of chunks while processing concurrently
+ */
+async function processChunksInParallel<T>(
+  items: T[],
+  processor: (item: T, index: number) => Promise<Buffer>,
+  concurrency: number = 3
+): Promise<Buffer[]> {
+  const results: Buffer[] = new Array(items.length);
+  let currentIndex = 0;
+
+  const processNext = async (): Promise<void> => {
+    while (currentIndex < items.length) {
+      const index = currentIndex++;
+      results[index] = await processor(items[index], index);
+    }
+  };
+
+  // Start concurrent workers
+  const workers = Array(Math.min(concurrency, items.length))
+    .fill(null)
+    .map(() => processNext());
+
+  await Promise.all(workers);
+  return results;
+}
+
 async function generateWithOpenAI(
   text: string,
   voice: OpenAIVoice = 'onyx',
   speed: number = 1.0,
-  fastMode: boolean = false
+  fastMode: boolean = false,
+  parallelChunks: boolean = false
 ): Promise<Buffer> {
   const client = getOpenAIClient();
   const chunks = splitForTTS(text, 4000);
-  const audioBuffers: Buffer[] = [];
 
   // tts-1 is faster (2x) but slightly lower quality than tts-1-hd
   const model = fastMode ? 'tts-1' : 'tts-1-hd';
 
-  for (const chunk of chunks) {
+  // Single chunk - no need for parallelization
+  if (chunks.length === 1) {
+    const response = await client.audio.speech.create({
+      model,
+      voice,
+      input: chunks[0],
+      speed,
+      response_format: 'mp3',
+    });
+    const arrayBuffer = await response.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  // Process chunk helper
+  const processChunk = async (chunk: string, index: number): Promise<Buffer> => {
+    console.log(`OpenAI TTS: Processing chunk ${index + 1}/${chunks.length} (${chunk.length} chars)`);
     const response = await client.audio.speech.create({
       model,
       voice,
@@ -286,12 +330,27 @@ async function generateWithOpenAI(
       speed,
       response_format: 'mp3',
     });
-
     const arrayBuffer = await response.arrayBuffer();
-    audioBuffers.push(Buffer.from(arrayBuffer));
+    return Buffer.from(arrayBuffer);
+  };
+
+  let audioBuffers: Buffer[];
+
+  if (parallelChunks) {
+    // Parallel processing with controlled concurrency (max 3 concurrent)
+    // This significantly speeds up generation for long texts
+    console.log(`OpenAI TTS: Processing ${chunks.length} chunks in parallel (max 3 concurrent)`);
+    audioBuffers = await processChunksInParallel(chunks, processChunk, 3);
+  } else {
+    // Sequential processing (original behavior)
+    audioBuffers = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const buffer = await processChunk(chunks[i], i);
+      audioBuffers.push(buffer);
+    }
   }
 
-  return audioBuffers.length === 1 ? audioBuffers[0] : Buffer.concat(audioBuffers);
+  return Buffer.concat(audioBuffers);
 }
 
 // ============================================================================
@@ -307,7 +366,7 @@ export async function generateAudio(
   text: string,
   options: GenerateAudioOptions = {}
 ): Promise<Buffer> {
-  const { provider = 'openai', voice, speed = 1.0, fastMode = false } = options;
+  const { provider = 'openai', voice, speed = 1.0, fastMode = false, parallelChunks = false } = options;
 
   // Use OpenAI by default (much cheaper than ElevenLabs)
   if (provider === 'openai' || !process.env.ELEVENLABS_API_KEY) {
@@ -315,7 +374,8 @@ export async function generateAudio(
       text,
       (voice as OpenAIVoice) || 'nova', // nova = warm female, similar to rachel
       speed,
-      fastMode
+      fastMode,
+      parallelChunks // Enable parallel chunk processing for faster generation
     );
   }
 
@@ -349,7 +409,8 @@ export async function generatePreviewAudio(
     : previewText;
 
   // Force OpenAI for previews (fast + cheap)
-  return generateAudio(cleanPreview, { ...options, provider: 'openai' });
+  // Previews are short enough that parallel processing isn't beneficial
+  return generateAudio(cleanPreview, { ...options, provider: 'openai', parallelChunks: false });
 }
 
 /**

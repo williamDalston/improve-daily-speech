@@ -1,17 +1,35 @@
 'use client';
 
-import { useState } from 'react';
-import { Rss, Copy, Check, ExternalLink } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Rss, Copy, Check, ExternalLink, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-interface RssFeedSectionProps {
-  feedUrl: string;
-}
-
-export function RssFeedSection({ feedUrl }: RssFeedSectionProps) {
+export function RssFeedSection() {
+  const [feedUrl, setFeedUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+
+  useEffect(() => {
+    fetchFeedUrl();
+  }, []);
+
+  const fetchFeedUrl = async () => {
+    try {
+      const res = await fetch('/api/user/feed-token');
+      if (res.ok) {
+        const data = await res.json();
+        setFeedUrl(data.feedUrl);
+      }
+    } catch (err) {
+      console.error('Failed to fetch feed URL:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCopy = async () => {
+    if (!feedUrl) return;
     try {
       await navigator.clipboard.writeText(feedUrl);
       setCopied(true);
@@ -20,6 +38,33 @@ export function RssFeedSection({ feedUrl }: RssFeedSectionProps) {
       console.error('Failed to copy:', err);
     }
   };
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    try {
+      const res = await fetch('/api/user/feed-token', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setFeedUrl(data.feedUrl);
+      }
+    } catch (err) {
+      console.error('Failed to regenerate feed URL:', err);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="rounded-xl border border-border bg-surface-secondary p-4 sm:p-6">
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="h-5 w-5 animate-spin text-brand" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!feedUrl) return null;
 
   return (
     <div className="rounded-xl border border-border bg-surface-secondary p-4 sm:p-6">
@@ -73,9 +118,20 @@ export function RssFeedSection({ feedUrl }: RssFeedSectionProps) {
             </div>
           </div>
 
-          <p className="text-body-xs text-text-tertiary mt-3">
-            New episodes will automatically appear in your podcast app when you create them.
-          </p>
+          <div className="flex items-center justify-between mt-3">
+            <p className="text-body-xs text-text-tertiary">
+              This is your private feed URL. New episodes appear automatically.
+            </p>
+            <button
+              onClick={handleRegenerate}
+              disabled={regenerating}
+              className="text-body-xs text-text-muted hover:text-text-secondary flex items-center gap-1"
+              title="Generate new URL (invalidates old one)"
+            >
+              <RefreshCw className={`h-3 w-3 ${regenerating ? 'animate-spin' : ''}`} />
+              Reset
+            </button>
+          </div>
         </div>
       </div>
     </div>

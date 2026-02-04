@@ -86,6 +86,8 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
                 episodeId={episode.id}
                 episodeTitle={episode.title || episode.topic}
                 transcript={episode.transcript}
+                shareId={episode.shareId}
+                isPublic={episode.isPublic}
               />
             )}
           </div>

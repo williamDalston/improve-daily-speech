@@ -57,8 +57,15 @@ export const metadata: Metadata = {
       { url: '/icon.svg', type: 'image/svg+xml' },
     ],
     apple: [
-      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/apple-touch-icon.png', sizes: '180x180' },
     ],
+  },
+
+  // Apple PWA
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'MindCast',
   },
 
   // Manifest for PWA

@@ -4,11 +4,12 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Headphones } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { EpisodeCard } from '@/components/episode-card';
+import { LibrarySearch } from '@/components/library-search';
 import { RssFeedSection } from '@/components/rss-feed-section';
 import { StreakBadge } from '@/components/streak-badge';
 import { PlaylistsSection } from '@/components/playlists-section';
 import { DailyDrop } from '@/components/daily-drop';
+import { ReviewReminders } from '@/components/review-reminders';
 import { getStreakInfo } from '@/lib/streak';
 
 export default async function LibraryPage() {
@@ -30,6 +31,7 @@ export default async function LibraryPage() {
         audioDurationSecs: true,
         createdAt: true,
         status: true,
+        voice: true,
       },
     }),
     getStreakInfo(session.user.id),
@@ -67,10 +69,6 @@ export default async function LibraryPage() {
     updatedAt: p.updatedAt.toISOString(),
   }));
 
-  // Build RSS feed URL
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://mindcast.app';
-  const feedUrl = `${baseUrl}/api/feed/${session.user.id}`;
-
   return (
     <div className="space-y-8">
       {/* Header - stack on mobile, row on desktop */}
@@ -101,8 +99,11 @@ export default async function LibraryPage() {
       {/* Daily Drop */}
       <DailyDrop />
 
+      {/* Spaced Repetition Reviews */}
+      {episodes.length > 0 && <ReviewReminders />}
+
       {/* RSS Feed Section - only show if user has episodes */}
-      {episodes.length > 0 && <RssFeedSection feedUrl={feedUrl} />}
+      {episodes.length > 0 && <RssFeedSection />}
 
       {/* Playlists Section */}
       <PlaylistsSection initialPlaylists={playlistsData} />
@@ -131,13 +132,7 @@ export default async function LibraryPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {episodes.map((episode) => (
-            <Link key={episode.id} href={`/episode/${episode.id}`} className="block">
-              <EpisodeCard episode={episode} />
-            </Link>
-          ))}
-        </div>
+        <LibrarySearch episodes={episodes} />
       )}
     </div>
   );

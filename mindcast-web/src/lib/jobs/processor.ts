@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { runFullPipeline, runQuickPipeline, type EpisodeLength } from '@/lib/ai/pipeline';
-import { generateAudio, generatePreviewAudio, estimateAudioDuration } from '@/lib/ai/tts';
+import { generateAudio, generatePreviewAudio, estimateAudioDuration, type OpenAIVoice } from '@/lib/ai/tts';
 import { generateQuickHook } from '@/lib/ai/gemini';
 import { incrementFreeUsage } from '@/lib/stripe';
 import { parseSourcesFromResearch, type Source } from '@/lib/ai/sources';
@@ -8,6 +8,7 @@ import { updateStreak, XP_REWARDS } from '@/lib/streak';
 
 type JobStatus = 'PENDING' | 'RESEARCH' | 'DRAFTING' | 'JUDGING' | 'ENHANCING' | 'AUDIO' | 'COMPLETE' | 'FAILED';
 type GenerationMode = 'quick' | 'deep';
+type DeviceType = 'mobile' | 'desktop';
 
 interface Footprint {
   timestamp: string;
@@ -123,18 +124,21 @@ function calculateProgress(stepType: string, stepStatus: string, stageIndex?: nu
  * Process a generation job
  * This function handles all the AI pipeline stages and stores results in the database
  * @param mode - 'quick' for faster generation (skips enhancements), 'deep' for full pipeline
+ * @param deviceType - 'mobile' for faster TTS (tts-1), 'desktop' for higher quality (tts-1-hd)
  */
 export async function processJob(
   jobId: string,
   userId: string,
   isPro: boolean,
-  mode: GenerationMode = 'deep'
+  mode: GenerationMode = 'deep',
+  voice: OpenAIVoice = 'nova',
+  deviceType: DeviceType = 'desktop'
 ): Promise<void> {
   try {
     // Get job details
     const job = await db.job.findUnique({
       where: { id: jobId },
-      select: { topic: true, length: true, style: true, status: true },
+      select: { topic: true, length: true, style: true, status: true, voice: true },
     });
 
     if (!job) {
@@ -147,7 +151,13 @@ export async function processJob(
     }
 
     const { topic, length, style } = job;
+    // Use voice from job if stored, otherwise use parameter (backwards compat)
+    const effectiveVoice = (job.voice as OpenAIVoice) || voice;
     const isQuickMode = mode === 'quick';
+    const isMobile = deviceType === 'mobile';
+    // Mobile always uses fast TTS for quicker time-to-first-sound
+    // Desktop uses high-quality TTS unless in quick mode
+    const useFastTTS = isMobile || isQuickMode;
 
     // Start processing
     await updateJobStatus(jobId, 'RESEARCH', 5, 'Starting...', { startedAt: new Date() });
@@ -254,7 +264,8 @@ export async function processJob(
         if (step.winnerText) {
           try {
             await addFootprint(jobId, 'Quick Preview', 'Creating audio preview so you can listen while we polish...');
-            const previewBuffer = await generatePreviewAudio(step.winnerText);
+            // Use fast TTS for mobile to minimize time-to-first-sound
+            const previewBuffer = await generatePreviewAudio(step.winnerText, { voice: effectiveVoice, fastMode: useFastTTS });
             const previewBase64 = previewBuffer.toString('base64');
             await db.job.update({
               where: { id: jobId },
@@ -300,11 +311,11 @@ export async function processJob(
       return;
     }
 
-    // 3. Update preview audio with enhanced version (skip in quick mode for speed)
-    if (!isQuickMode) {
+    // 3. Update preview audio with enhanced version (skip in quick mode and on mobile for speed)
+    if (!isQuickMode && !isMobile) {
       await updateJobStatus(jobId, 'AUDIO', 85, 'Upgrading preview audio...');
       await addFootprint(jobId, 'Audio Upgrade', 'Upgrading preview with polished script...');
-      const previewBuffer = await generatePreviewAudio(finalText);
+      const previewBuffer = await generatePreviewAudio(finalText, { voice: effectiveVoice, fastMode: false });
       const previewBase64 = previewBuffer.toString('base64');
 
       await db.job.update({
@@ -319,12 +330,18 @@ export async function processJob(
       }
     }
 
-    // 4. Generate full audio (use fast TTS in quick mode)
-    await updateJobStatus(jobId, 'AUDIO', isQuickMode ? 70 : 92, 'Generating full audio...');
-    await addFootprint(jobId, 'Full Audio', isQuickMode
+    // 4. Generate full audio (use fast TTS for mobile or quick mode, parallel for desktop)
+    await updateJobStatus(jobId, 'AUDIO', useFastTTS ? 70 : 92, 'Generating full audio...');
+    await addFootprint(jobId, 'Full Audio', useFastTTS
       ? 'Generating audio with fast TTS...'
       : 'Generating complete high-quality audio...');
-    const audioBuffer = await generateAudio(finalText, { fastMode: isQuickMode });
+    // Desktop uses parallel chunk processing for faster generation
+    // Mobile uses sequential for lower memory usage
+    const audioBuffer = await generateAudio(finalText, {
+      fastMode: useFastTTS,
+      voice: effectiveVoice,
+      parallelChunks: !isMobile, // Parallel for desktop, sequential for mobile
+    });
     const audioBase64 = audioBuffer.toString('base64');
     const audioDuration = estimateAudioDuration(finalText);
     await addFootprint(jobId, 'Episode Complete', `Your ${Math.round(audioDuration / 60)}-minute episode is ready!`);
@@ -340,6 +357,7 @@ export async function processJob(
         status: 'READY',
         wordCount: finalText.split(/\s+/).length,
         audioDurationSecs: audioDuration,
+        voice: effectiveVoice, // Store the TTS voice used
         ...(parsedSources.length > 0 ? { sources: parsedSources as unknown as object } : {}),
         // In production: audioUrl: uploadedUrl (S3/R2)
       },

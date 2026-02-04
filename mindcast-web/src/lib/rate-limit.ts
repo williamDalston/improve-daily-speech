@@ -1,33 +1,16 @@
 /**
  * Rate Limiting Utility
  *
- * In-memory rate limiter for API routes.
- * For production at scale, consider upgrading to Redis-based limiting.
+ * Uses Upstash Redis for production (survives serverless restarts)
+ * Falls back to in-memory for local development.
  */
 
-interface RateLimitEntry {
-  count: number;
-  resetTime: number;
-}
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 
-// In-memory store (resets on server restart - acceptable for serverless)
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
-// Cleanup old entries periodically
-const CLEANUP_INTERVAL = 60 * 1000; // 1 minute
-let lastCleanup = Date.now();
-
-function cleanupExpired() {
-  const now = Date.now();
-  if (now - lastCleanup < CLEANUP_INTERVAL) return;
-
-  lastCleanup = now;
-  rateLimitStore.forEach((entry, key) => {
-    if (entry.resetTime < now) {
-      rateLimitStore.delete(key);
-    }
-  });
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface RateLimitConfig {
   /** Maximum number of requests allowed in the window */
@@ -45,26 +28,84 @@ export interface RateLimitResult {
   resetIn: number; // seconds until reset
 }
 
-/**
- * Check if a request is within rate limits
- * @param key - Unique identifier (usually IP or user ID)
- * @param config - Rate limit configuration
- */
-export function checkRateLimit(
-  key: string,
-  config: RateLimitConfig
-): RateLimitResult {
+// ─────────────────────────────────────────────────────────────────────────────
+// REDIS SETUP (production)
+// ─────────────────────────────────────────────────────────────────────────────
+
+let redis: Redis | null = null;
+const rateLimiters = new Map<string, Ratelimit>();
+
+function getRedis(): Redis | null {
+  if (redis) return redis;
+
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!url || !token) {
+    return null;
+  }
+
+  redis = new Redis({ url, token });
+  return redis;
+}
+
+function getOrCreateRateLimiter(config: RateLimitConfig): Ratelimit | null {
+  const redisClient = getRedis();
+  if (!redisClient) return null;
+
+  const key = `${config.identifier}:${config.limit}:${config.windowSeconds}`;
+
+  if (!rateLimiters.has(key)) {
+    rateLimiters.set(
+      key,
+      new Ratelimit({
+        redis: redisClient,
+        limiter: Ratelimit.slidingWindow(config.limit, `${config.windowSeconds}s`),
+        prefix: `ratelimit:${config.identifier}`,
+        analytics: true,
+      })
+    );
+  }
+
+  return rateLimiters.get(key)!;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IN-MEMORY FALLBACK (development)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+
+const memoryStore = new Map<string, RateLimitEntry>();
+const CLEANUP_INTERVAL = 60 * 1000;
+let lastCleanup = Date.now();
+
+function cleanupExpired() {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL) return;
+
+  lastCleanup = now;
+  memoryStore.forEach((entry, key) => {
+    if (entry.resetTime < now) {
+      memoryStore.delete(key);
+    }
+  });
+}
+
+function checkMemoryRateLimit(key: string, config: RateLimitConfig): RateLimitResult {
   cleanupExpired();
 
   const now = Date.now();
   const fullKey = `${config.identifier}:${key}`;
   const windowMs = config.windowSeconds * 1000;
 
-  const existing = rateLimitStore.get(fullKey);
+  const existing = memoryStore.get(fullKey);
 
   if (!existing || existing.resetTime < now) {
-    // Create new entry
-    rateLimitStore.set(fullKey, {
+    memoryStore.set(fullKey, {
       count: 1,
       resetTime: now + windowMs,
     });
@@ -77,7 +118,6 @@ export function checkRateLimit(
     };
   }
 
-  // Check if over limit
   if (existing.count >= config.limit) {
     return {
       success: false,
@@ -87,7 +127,6 @@ export function checkRateLimit(
     };
   }
 
-  // Increment count
   existing.count++;
 
   return {
@@ -96,6 +135,53 @@ export function checkRateLimit(
     remaining: config.limit - existing.count,
     resetIn: Math.ceil((existing.resetTime - now) / 1000),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MAIN API
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Check if a request is within rate limits
+ * Uses Redis when UPSTASH_REDIS_* env vars are set, otherwise falls back to in-memory
+ *
+ * @param key - Unique identifier (usually IP or user ID)
+ * @param config - Rate limit configuration
+ */
+export async function checkRateLimit(
+  key: string,
+  config: RateLimitConfig
+): Promise<RateLimitResult> {
+  const rateLimiter = getOrCreateRateLimiter(config);
+
+  // Use in-memory fallback if Redis is not configured
+  if (!rateLimiter) {
+    return checkMemoryRateLimit(key, config);
+  }
+
+  try {
+    const result = await rateLimiter.limit(key);
+
+    return {
+      success: result.success,
+      limit: result.limit,
+      remaining: result.remaining,
+      resetIn: Math.ceil((result.reset - Date.now()) / 1000),
+    };
+  } catch (error) {
+    // If Redis fails, fall back to in-memory (fail open with logging)
+    console.error('[Rate Limit] Redis error, falling back to in-memory:', error);
+    return checkMemoryRateLimit(key, config);
+  }
+}
+
+/**
+ * Synchronous rate limit check - only uses in-memory (for backwards compatibility)
+ * @deprecated Use async checkRateLimit instead
+ */
+export function checkRateLimitSync(key: string, config: RateLimitConfig): RateLimitResult {
+  // Only in-memory for sync calls
+  return checkMemoryRateLimit(key, config);
 }
 
 /**
@@ -162,6 +248,20 @@ export const rateLimits = {
     identifier: 'auth',
   },
 
+  // Instant Host - conversational AI
+  instantHost: {
+    limit: 60,
+    windowSeconds: 60, // 60 per minute
+    identifier: 'instant-host',
+  },
+
+  // TTS - audio generation
+  tts: {
+    limit: 30,
+    windowSeconds: 60, // 30 per minute
+    identifier: 'tts',
+  },
+
   // General API (catch-all)
   general: {
     limit: 100,
@@ -212,4 +312,11 @@ export function rateLimitedResponse(result: RateLimitResult): Response {
       },
     }
   );
+}
+
+/**
+ * Check if Redis is available for rate limiting
+ */
+export function isRedisConfigured(): boolean {
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 }
