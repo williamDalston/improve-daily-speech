@@ -4,24 +4,18 @@ import Google from 'next-auth/providers/google';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { db } from './db';
 import bcrypt from 'bcryptjs';
+import type { Adapter } from 'next-auth/adapters';
 
-export const {
-  handlers: { GET, POST },
-  auth,
-  signIn,
-  signOut,
-} = NextAuth({
-  adapter: PrismaAdapter(db),
+const authConfig = {
+  adapter: PrismaAdapter(db) as Adapter,
   session: {
-    strategy: 'jwt',
+    strategy: 'jwt' as const,
   },
   providers: [
-    // Google OAuth
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    // Email/Password
     Credentials({
       name: 'credentials',
       credentials: {
@@ -34,7 +28,6 @@ export const {
             return null;
           }
 
-          // Normalize email to lowercase for consistent matching
           const email = (credentials.email as string).toLowerCase();
           const password = credentials.password as string;
 
@@ -69,12 +62,11 @@ export const {
     signIn: '/login',
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account }: { token: any; user?: any; account?: any }) {
       try {
         if (user) {
           token.id = user.id;
         }
-        // For OAuth providers, get user ID from database
         if (account && account.provider !== 'credentials') {
           const dbUser = await db.user.findUnique({
             where: { email: token.email! },
@@ -89,12 +81,11 @@ export const {
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       try {
         if (session.user && token.id) {
           session.user.id = token.id as string;
 
-          // Fetch subscription status
           const dbUser = await db.user.findUnique({
             where: { id: token.id as string },
             select: {
@@ -116,7 +107,12 @@ export const {
       return session;
     },
   },
-});
+};
+
+export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
+
+// Export GET and POST for the route handler
+export const { GET, POST } = handlers;
 
 // Type augmentation for session
 declare module 'next-auth' {
