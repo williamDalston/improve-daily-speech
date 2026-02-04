@@ -20,6 +20,17 @@ const nextConfig = {
     ],
   },
 
+  // Redirect /favicon.ico to our SVG icon
+  async redirects() {
+    return [
+      {
+        source: '/favicon.ico',
+        destination: '/icon.svg',
+        permanent: true,
+      },
+    ];
+  },
+
   // Security and caching headers
   async headers() {
     const securityHeaders = [
