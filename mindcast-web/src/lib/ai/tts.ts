@@ -1,6 +1,6 @@
 /**
  * Unified Text-to-Speech
- * Supports ElevenLabs (most natural), OpenAI TTS (premium), and Google Cloud TTS (fast)
+ * All TTS is handled by ElevenLabs.
  */
 
 import OpenAI from 'openai';
@@ -254,39 +254,23 @@ async function generateWithOpenAI(
 // ============================================================================
 
 /**
- * Generate audio from text
- * Priority: ElevenLabs (most natural) > OpenAI (premium) > Google (fast)
+ * Generate audio from text (ElevenLabs only)
  */
 export async function generateAudio(
   text: string,
   options: GenerateAudioOptions = {}
 ): Promise<Buffer> {
-  const { provider, voice, voiceId, speed = 1.0, stability, similarityBoost } = options;
+  const { voice, voiceId, stability, similarityBoost } = options;
 
-  // ElevenLabs - most natural voices
-  if (provider === 'elevenlabs' || (!provider && process.env.ELEVENLABS_API_KEY)) {
-    if (process.env.ELEVENLABS_API_KEY) {
-      return generateWithElevenLabs(
-        text,
-        (voice as ElevenLabsVoice) || 'rachel',
-        { voiceId, stability, similarityBoost }
-      );
-    }
+  if (!process.env.ELEVENLABS_API_KEY) {
+    throw new Error('ELEVENLABS_API_KEY not configured');
   }
 
-  // OpenAI - premium quality
-  if (provider === 'openai' || (!provider && process.env.OPENAI_API_KEY)) {
-    if (process.env.OPENAI_API_KEY) {
-      return generateWithOpenAI(text, (voice as OpenAIVoice) || 'nova', speed);
-    }
-  }
-
-  // Google - fast
-  if (provider === 'google' && process.env.GOOGLE_TTS_API_KEY) {
-    return generateWithGoogle(text, (voice as GoogleVoice) || 'en-US-Neural2-D', speed);
-  }
-
-  throw new Error('No TTS provider configured');
+  return generateWithElevenLabs(
+    text,
+    (voice as ElevenLabsVoice) || 'rachel',
+    { voiceId, stability, similarityBoost }
+  );
 }
 
 /**

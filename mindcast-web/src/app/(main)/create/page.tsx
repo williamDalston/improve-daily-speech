@@ -1125,23 +1125,6 @@ export default function CreatePage() {
                   )}
                 </div>
 
-                {/* Preview Audio - when ready */}
-                {previewAudio && (
-                  <div className="animate-slide-up rounded-xl border-2 border-success/30 bg-success/5 p-4">
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-success">
-                        <Check className="h-3 w-3 text-white" />
-                      </div>
-                      <p className="text-sm font-semibold text-success">
-                        Preview ready - start listening!
-                      </p>
-                    </div>
-                    <AudioPlayer src={previewAudio} autoPlay />
-                    <p className="mt-2 text-center text-xs text-text-muted">
-                      Full episode generating in background...
-                    </p>
-                  </div>
-                )}
               </div>
             )}
 
