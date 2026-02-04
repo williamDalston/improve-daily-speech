@@ -8,6 +8,7 @@ import type { Adapter } from 'next-auth/adapters';
 
 const authConfig = {
   adapter: PrismaAdapter(db) as Adapter,
+  trustHost: true, // Required for Vercel deployment with NextAuth v5
   session: {
     strategy: 'jwt' as const,
   },
