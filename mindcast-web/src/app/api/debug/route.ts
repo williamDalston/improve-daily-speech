@@ -12,12 +12,19 @@ export async function GET() {
     // Database
     hasDbUrl: !!process.env.DATABASE_URL,
     dbUrlPrefix: process.env.DATABASE_URL?.substring(0, 30) + '...',
-    // Auth - check if these are set (don't reveal values)
+    // Auth
     hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
     hasNextAuthUrl: !!process.env.NEXTAUTH_URL,
-    nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
     hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
     hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
+    // AI API Keys (required for generation)
+    hasAnthropicKey: !!process.env.ANTHROPIC_API_KEY,
+    anthropicKeyPrefix: process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.substring(0, 8) + '...' : 'NOT SET',
+    hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+    openaiKeyPrefix: process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 8) + '...' : 'NOT SET',
+    hasGeminiKey: !!process.env.GEMINI_API_KEY,
+    geminiKeyPrefix: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 8) + '...' : 'NOT SET',
+    hasGoogleTTSKey: !!process.env.GOOGLE_TTS_API_KEY,
   };
 
   try {
@@ -45,7 +52,7 @@ export async function GET() {
 
     // Check schema by trying to select password field
     try {
-      const userWithPassword = await db.user.findFirst({
+      await db.user.findFirst({
         select: { password: true },
         take: 1,
       });
@@ -53,6 +60,32 @@ export async function GET() {
     } catch (e) {
       checks.passwordFieldExists = false;
       checks.passwordFieldError = e instanceof Error ? e.message : 'Unknown';
+    }
+
+    // Check recent jobs
+    try {
+      const recentJobs = await db.job.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          status: true,
+          progress: true,
+          error: true,
+          createdAt: true,
+          topic: true,
+        },
+      });
+      checks.recentJobs = recentJobs.map(j => ({
+        id: j.id.substring(0, 8),
+        status: j.status,
+        progress: j.progress,
+        error: j.error,
+        topic: j.topic?.substring(0, 30),
+        created: j.createdAt,
+      }));
+    } catch (e) {
+      checks.jobsError = e instanceof Error ? e.message : 'Unknown';
     }
 
   } catch (error) {
