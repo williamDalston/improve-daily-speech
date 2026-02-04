@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { runFullPipeline, type EpisodeLength } from '@/lib/ai/pipeline';
+import { runFullPipeline, runQuickPipeline, type EpisodeLength } from '@/lib/ai/pipeline';
 import { generateAudio, generatePreviewAudio, estimateAudioDuration } from '@/lib/ai/tts';
 import { generateQuickHook } from '@/lib/ai/gemini';
 import { incrementFreeUsage } from '@/lib/stripe';
@@ -7,6 +7,7 @@ import { parseSourcesFromResearch, type Source } from '@/lib/ai/sources';
 import { updateStreak, XP_REWARDS } from '@/lib/streak';
 
 type JobStatus = 'PENDING' | 'RESEARCH' | 'DRAFTING' | 'JUDGING' | 'ENHANCING' | 'AUDIO' | 'COMPLETE' | 'FAILED';
+type GenerationMode = 'quick' | 'deep';
 
 interface Footprint {
   timestamp: string;
@@ -121,11 +122,13 @@ function calculateProgress(stepType: string, stepStatus: string, stageIndex?: nu
 /**
  * Process a generation job
  * This function handles all the AI pipeline stages and stores results in the database
+ * @param mode - 'quick' for faster generation (skips enhancements), 'deep' for full pipeline
  */
 export async function processJob(
   jobId: string,
   userId: string,
-  isPro: boolean
+  isPro: boolean,
+  mode: GenerationMode = 'deep'
 ): Promise<void> {
   try {
     // Get job details
@@ -144,6 +147,7 @@ export async function processJob(
     }
 
     const { topic, length, style } = job;
+    const isQuickMode = mode === 'quick';
 
     // Start processing
     await updateJobStatus(jobId, 'RESEARCH', 5, 'Starting...', { startedAt: new Date() });
@@ -172,12 +176,21 @@ export async function processJob(
       return currentJob?.status === 'FAILED';
     };
 
-    // 2. Run full AI pipeline
+    // 2. Run AI pipeline (quick or deep)
     let finalText = '';
     let lastEnhancementStage = '';
     let parsedSources: Source[] = [];
 
-    for await (const step of runFullPipeline(topic, length as EpisodeLength, style || undefined)) {
+    // Choose pipeline based on mode
+    const pipeline = isQuickMode
+      ? runQuickPipeline(topic, length as EpisodeLength, style || undefined)
+      : runFullPipeline(topic, length as EpisodeLength, style || undefined);
+
+    if (isQuickMode) {
+      await addFootprint(jobId, 'Quick Mode', 'Using faster generation - good quality, fewer refinements');
+    }
+
+    for await (const step of pipeline) {
       // Check for cancellation between steps
       if (await checkCancelled()) {
         return;

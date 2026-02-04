@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
     return rateLimitedResponse(rateLimit);
   }
 
-  const { topic: rawTopic, length = '10 min', style = '' } = await request.json();
+  const { topic: rawTopic, length = '10 min', style = '', mode = 'deep' } = await request.json();
+  const generationMode = mode === 'quick' ? 'quick' : 'deep'; // Validate mode
 
   if (!rawTopic || typeof rawTopic !== 'string') {
     return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Create the job record
+  // Note: mode is passed to processJob directly (not stored in DB to avoid migration)
   const job = await db.job.create({
     data: {
       userId: session.user.id,
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
   // Start processing in the background using waitUntil to keep function alive
   // This ensures the job continues even after HTTP response is sent
   waitUntil(
-    processJob(job.id, session.user.id, session.user.isPro ?? false).catch((err) => {
+    processJob(job.id, session.user.id, session.user.isPro ?? false, generationMode).catch((err) => {
       console.error('Job processing failed:', err);
     })
   );

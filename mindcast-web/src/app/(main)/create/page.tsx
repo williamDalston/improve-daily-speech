@@ -287,6 +287,8 @@ export default function CreatePage() {
   const [personalContext, setPersonalContext] = useState('');
   const [showPersonalization, setShowPersonalization] = useState(false);
   const [showCustomization, setShowCustomization] = useState(false); // Hide customization until user wants it
+  const [generationMode, setGenerationMode] = useState<'quick' | 'deep'>('deep'); // Quick = faster but less polished
+  const [pendingAutoGenerate, setPendingAutoGenerate] = useState(false); // Track if we should auto-start
   const [isGenerating, setIsGenerating] = useState(false);
   const [episodeReady, setEpisodeReady] = useState(false);
   const [autoPlayEpisode, setAutoPlayEpisode] = useState(false);
@@ -321,9 +323,15 @@ export default function CreatePage() {
   // Restore topic from localStorage on mount (preserves across login redirect)
   useEffect(() => {
     const savedTopic = localStorage.getItem('mindcast_pending_topic');
+    const shouldAutoGenerate = localStorage.getItem('mindcast_auto_generate');
     if (savedTopic) {
       setTopic(savedTopic);
       localStorage.removeItem('mindcast_pending_topic');
+      // If user was redirected to login, auto-start generation
+      if (shouldAutoGenerate === 'true') {
+        localStorage.removeItem('mindcast_auto_generate');
+        setPendingAutoGenerate(true);
+      }
     }
   }, []);
 
@@ -385,6 +393,20 @@ export default function CreatePage() {
       wakeLockRef.current?.release();
     };
   }, []);
+
+  // Auto-generate after returning from login (smooth flow)
+  const handleGenerateRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    // Only auto-generate once when: topic restored, user logged in, pending flag set
+    if (pendingAutoGenerate && session?.user && topic && !isGenerating) {
+      setPendingAutoGenerate(false);
+      // Small delay for smooth transition after login
+      const timer = setTimeout(() => {
+        handleGenerateRef.current?.();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingAutoGenerate, session?.user, topic, isGenerating]);
 
   const completedSteps = steps.filter((s) => s.status === 'done').length;
   const progress = (completedSteps / steps.length) * 100;
@@ -524,6 +546,7 @@ export default function CreatePage() {
     if (!session?.user) {
       // Save topic to localStorage so it persists across login
       localStorage.setItem('mindcast_pending_topic', topic);
+      localStorage.setItem('mindcast_auto_generate', 'true'); // Auto-start after login
       router.push('/login');
       return;
     }
@@ -589,7 +612,7 @@ export default function CreatePage() {
       const response = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: fullTopic, length, style: stylePrompt }),
+        body: JSON.stringify({ topic: fullTopic, length, style: stylePrompt, mode: generationMode }),
         signal: abortControllerRef.current.signal,
       });
 
@@ -618,7 +641,12 @@ export default function CreatePage() {
       setError(errorMessage);
       setIsGenerating(false);
     }
-  }, [topic, length, session, router, selectedTemplate, selectedStyle, selectedIntent, selectedLevel, selectedConstraints, personalContext, pollJobStatus]);
+  }, [topic, length, session, router, selectedTemplate, selectedStyle, selectedIntent, selectedLevel, selectedConstraints, personalContext, generationMode, pollJobStatus]);
+
+  // Keep ref updated for auto-generate after login
+  useEffect(() => {
+    handleGenerateRef.current = handleGenerate;
+  }, [handleGenerate]);
 
   // Cancel job handler
   const handleCancel = useCallback(async () => {
@@ -996,6 +1024,53 @@ export default function CreatePage() {
                 ))}
               </div>
             </div>
+
+            {/* Generation Mode - Quick vs Deep */}
+            {!isGenerating && topic && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text-primary">
+                  Generation Speed
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setGenerationMode('quick')}
+                    className={cn(
+                      'flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all active:scale-[0.98]',
+                      'touch-manipulation',
+                      generationMode === 'quick'
+                        ? 'border-brand bg-brand/10'
+                        : 'border-border hover:border-brand/50'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Zap className={cn('h-5 w-5', generationMode === 'quick' ? 'text-brand' : 'text-text-muted')} />
+                      <span className={cn('font-semibold', generationMode === 'quick' ? 'text-brand' : 'text-text-primary')}>
+                        Quick
+                      </span>
+                    </div>
+                    <span className="text-xs text-text-muted">Faster, good quality</span>
+                  </button>
+                  <button
+                    onClick={() => setGenerationMode('deep')}
+                    className={cn(
+                      'flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition-all active:scale-[0.98]',
+                      'touch-manipulation',
+                      generationMode === 'deep'
+                        ? 'border-brand bg-brand/10'
+                        : 'border-border hover:border-brand/50'
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Brain className={cn('h-5 w-5', generationMode === 'deep' ? 'text-brand' : 'text-text-muted')} />
+                      <span className={cn('font-semibold', generationMode === 'deep' ? 'text-brand' : 'text-text-primary')}>
+                        Deep
+                      </span>
+                    </div>
+                    <span className="text-xs text-text-muted">More polished, thorough</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Error */}
             {error && (

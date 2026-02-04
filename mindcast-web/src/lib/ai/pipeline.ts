@@ -281,6 +281,41 @@ export async function* runFullPipeline(
   yield { type: 'done', finalText: currentText };
 }
 
+/**
+ * Quick pipeline - faster generation with fewer refinements
+ * Skips enhancement stages for speed while maintaining good quality
+ */
+export async function* runQuickPipeline(
+  topic: string,
+  length: EpisodeLength = '10 min',
+  style?: string
+): AsyncGenerator<PipelineStep> {
+  // Stage 0: Research (still essential for quality)
+  yield { type: 'research', status: 'running' };
+  const research = await runResearch(topic, length);
+  yield { type: 'research', status: 'done', research };
+
+  // Stage 1: Parallel Drafts (with style applied)
+  yield { type: 'drafts', status: 'running' };
+  const drafts = await runParallelDrafts(topic, research, length, style);
+  yield { type: 'drafts', status: 'done', drafts, draftA: drafts[0].text, draftB: drafts[1].text };
+
+  // Judge - pick the best draft
+  yield { type: 'judge', status: 'running' };
+  const judgeResult = await runJudge(topic, drafts);
+  yield {
+    type: 'judge',
+    status: 'done',
+    winner: judgeResult.winnerLabel,
+    winnerText: judgeResult.winnerText,
+    judgment: judgeResult.judgment,
+  };
+
+  // Skip enhancement stages - use winning draft directly
+  // The winning draft is already good quality from Claude or GPT-4
+  yield { type: 'done', finalText: judgeResult.winnerText };
+}
+
 // ============================================================================
 // Learning Add-ons
 // ============================================================================
