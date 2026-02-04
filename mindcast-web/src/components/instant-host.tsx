@@ -677,8 +677,20 @@ export function InstantHost({
 
         // After intro, ask for mic permission (only once)
         if (targetPhase === 'intro' && !micPermissionAsked) {
-          setPhase('listening'); // Pause here for permission/input
-          return; // Don't auto-continue - wait for user interaction
+          if (isMobile) {
+            // Mobile: auto-request mic and start conversation — no tap needed
+            requestMicPermission().then((granted) => {
+              if (granted) {
+                startProactiveConversation();
+              } else {
+                // Mic denied — show text input as fallback
+                setPhase('listening');
+              }
+            });
+          } else {
+            setPhase('listening'); // Desktop: show permission prompt
+          }
+          return;
         }
 
         // After host speaks, pause and wait for user response if enabled
@@ -760,7 +772,7 @@ export function InstantHost({
       setIsLoadingAudio(false);
       setError('Could not start voice host');
     }
-  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening, deviceType]);
+  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening, deviceType, isMobile, requestMicPermission, startProactiveConversation]);
 
   // Start when generation begins
   useEffect(() => {
@@ -818,6 +830,13 @@ export function InstantHost({
       }
     }
   }, [episodeReady, isGenerating, phase, isPlaying, generateAndSpeak, stopAudioPlayback]);
+
+  // Auto-start listening on mobile when in listening phase (always-on mode)
+  useEffect(() => {
+    if (isMobile && showStickyBar && micEnabled && !showTextInput && !isListening && !isPlaying && !isLoadingAudio) {
+      startListening();
+    }
+  }, [isMobile, showStickyBar, micEnabled, showTextInput, isListening, isPlaying, isLoadingAudio, startListening]);
 
   // Cleanup
   useEffect(() => {
@@ -1486,30 +1505,8 @@ export function InstantHost({
           className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface/95 backdrop-blur-sm"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
-          <div className="px-4 py-3">
-            {/* Quick prompts row */}
-            <div
-              className="flex gap-2 mb-3 overflow-x-auto pb-1"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              {(conversationHistory.length === 0
-                ? ['What fascinates you?', 'Tell me something surprising', 'Why does this matter?']
-                : ['Tell me more', 'Give an example', 'What else?']
-              ).map((prompt, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    triggerHaptic('light');
-                    handleUserInput(prompt);
-                  }}
-                  className="flex-shrink-0 text-sm px-4 py-2 rounded-full border border-brand/30 text-brand hover:bg-brand/10 active:scale-95 transition-all"
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
-            {/* Input row */}
+          <div className="px-4 py-2">
+            {/* Input row — primary action at top for easy reach */}
             <div className="flex items-center gap-3">
               {/* Mode toggle button */}
               <button
@@ -1521,7 +1518,6 @@ export function InstantHost({
                   } else {
                     pauseListening();
                     setShowTextInput(true);
-                    // Auto-focus text input
                     setTimeout(() => textInputRef.current?.focus(), 100);
                   }
                 }}
@@ -1568,49 +1564,81 @@ export function InstantHost({
                   </button>
                 </>
               ) : (
-                /* Voice input mode */
-                <button
-                  onClick={() => {
-                    triggerHaptic('medium');
-                    if (isListening) {
-                      pauseListening();
-                    } else {
-                      startListening();
-                    }
-                  }}
-                  className={cn(
-                    "flex-1 h-14 flex items-center justify-center gap-3 rounded-full font-medium text-base transition-all active:scale-[0.98]",
-                    isListening
-                      ? "bg-success text-white"
-                      : "bg-brand text-white"
-                  )}
-                >
-                  {isListening ? (
-                    <>
-                      <div className="w-3 h-3 rounded-full bg-white animate-pulse" />
-                      <span>{userSpeech || 'Listening...'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="h-5 w-5" />
-                      <span>Tap to speak</span>
-                    </>
-                  )}
-                </button>
+                /* Voice input mode - always-on listening */
+                <div className="flex-1 flex items-center gap-2">
+                  <div
+                    className={cn(
+                      "flex-1 h-14 flex items-center gap-3 rounded-full px-4 transition-all",
+                      isListening
+                        ? "bg-success/10 border border-success/30"
+                        : "bg-surface-secondary border border-border"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-3 h-3 rounded-full flex-shrink-0 transition-all",
+                      isListening ? "bg-success animate-pulse" : "bg-text-muted"
+                    )} />
+                    <span className={cn(
+                      "text-sm truncate flex-1",
+                      isListening ? "text-success" : "text-text-muted"
+                    )}>
+                      {userSpeech || (isListening ? 'Listening... speak anytime' : 'Mic paused')}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      triggerHaptic('light');
+                      if (isListening) {
+                        pauseListening();
+                      } else {
+                        startListening();
+                      }
+                    }}
+                    className={cn(
+                      "flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-full transition-all active:scale-95",
+                      isListening
+                        ? "bg-success text-white"
+                        : "bg-surface-secondary text-text-muted"
+                    )}
+                    aria-label={isListening ? "Pause listening" : "Resume listening"}
+                  >
+                    {isListening ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                  </button>
+                </div>
               )}
             </div>
 
-            {/* Skip option */}
-            <button
-              onClick={() => {
-                stopListening();
-                const nextPhase = phaseCountRef.current < 2 ? 'deep_dive' : 'curiosity';
-                generateAndSpeak(nextPhase);
-              }}
-              className="w-full text-sm text-text-muted hover:text-text-secondary text-center py-2 mt-2"
+            {/* Quick prompts + skip — compact row below */}
+            <div
+              className="flex gap-2 mt-2 overflow-x-auto pb-1"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              Skip — continue listening
-            </button>
+              {(conversationHistory.length === 0
+                ? ['What fascinates you?', 'Something surprising', 'Why does this matter?']
+                : ['Tell me more', 'Give an example', 'What else?']
+              ).map((prompt, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    triggerHaptic('light');
+                    handleUserInput(prompt);
+                  }}
+                  className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full border border-brand/30 text-brand hover:bg-brand/10 active:scale-95 transition-all"
+                >
+                  {prompt}
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  stopListening();
+                  const nextPhase = phaseCountRef.current < 2 ? 'deep_dive' : 'curiosity';
+                  generateAndSpeak(nextPhase);
+                }}
+                className="flex-shrink-0 text-xs px-3 py-1.5 rounded-full border border-border text-text-muted hover:bg-surface-secondary active:scale-95 transition-all"
+              >
+                Skip
+              </button>
+            </div>
           </div>
         </div>
       )}
