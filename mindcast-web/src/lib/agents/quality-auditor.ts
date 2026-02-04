@@ -130,7 +130,7 @@ export function analyzeTranscript(transcript: string): QualityScore {
 
   // Check for jargon without explanation
   const technicalTerms = transcript.match(/\b[A-Z]{2,}\b/g) || [];
-  const uniqueAcronyms = [...new Set(technicalTerms)];
+  const uniqueAcronyms = Array.from(new Set(technicalTerms));
   if (uniqueAcronyms.length > 5) {
     clarityScore -= 10;
     suggestions.push(`Consider explaining acronyms: ${uniqueAcronyms.slice(0, 5).join(', ')}`);

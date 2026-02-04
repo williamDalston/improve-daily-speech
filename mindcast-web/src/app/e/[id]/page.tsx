@@ -80,7 +80,7 @@ export default async function PublicEpisodePage({ params, searchParams }: Public
 
   const title = episode.title || episode.topic;
   const startTime = searchParams.t ? parseInt(searchParams.t, 10) : 0;
-  const sources = (episode.sources as Source[]) || [];
+  const sources = (episode.sources as unknown as Source[]) || [];
 
   // Get a preview of the transcript (first ~500 chars)
   const transcriptPreview = episode.transcript

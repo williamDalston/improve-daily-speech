@@ -23,7 +23,7 @@ async function addFootprint(jobId: string, action: string, detail: string) {
     select: { footprints: true },
   });
 
-  const existingFootprints = (job?.footprints as Footprint[]) || [];
+  const existingFootprints = (job?.footprints as unknown as Footprint[]) || [];
   const newFootprint: Footprint = {
     timestamp: new Date().toISOString(),
     action,
@@ -35,7 +35,7 @@ async function addFootprint(jobId: string, action: string, detail: string) {
 
   await db.job.update({
     where: { id: jobId },
-    data: { footprints: updatedFootprints },
+    data: { footprints: updatedFootprints as unknown as object },
   });
 }
 
@@ -179,8 +179,9 @@ export async function processJob(
       }
 
       const status = mapStepToStatus(step.type);
-      const progress = calculateProgress(step.type, step.status);
-      const currentStep = step.stageName || step.message || step.type;
+      const stepStatus = step.type === 'done' ? 'done' : step.status;
+      const progress = calculateProgress(step.type, stepStatus);
+      const currentStep = ('stageName' in step ? step.stageName : undefined) || step.type;
 
       await updateJobStatus(jobId, status, progress, currentStep);
 
@@ -198,7 +199,7 @@ export async function processJob(
           where: { id: jobId },
           data: {
             research: researchText,
-            sources: parsedSources.length > 0 ? parsedSources : null,
+            ...(parsedSources.length > 0 ? { sources: parsedSources as unknown as object } : {}),
           },
         });
         await addFootprint(jobId, 'Research Complete', `Found ${parsedSources.length} sources and key insights`);
@@ -299,7 +300,7 @@ export async function processJob(
         status: 'READY',
         wordCount: finalText.split(/\s+/).length,
         audioDurationSecs: audioDuration,
-        sources: parsedSources.length > 0 ? parsedSources : null,
+        ...(parsedSources.length > 0 ? { sources: parsedSources as unknown as object } : {}),
         // In production: audioUrl: uploadedUrl (S3/R2)
       },
     });

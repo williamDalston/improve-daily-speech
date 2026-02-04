@@ -15,6 +15,9 @@ import {
   type EpisodeLength,
 } from './prompts';
 
+// Re-export types for consumers
+export type { EpisodeLength };
+
 // Clients (lazy initialization)
 let anthropicClient: Anthropic | null = null;
 let openaiClient: OpenAI | null = null;

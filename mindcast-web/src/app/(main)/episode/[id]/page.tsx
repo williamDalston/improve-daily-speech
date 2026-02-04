@@ -121,7 +121,7 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
 
       {/* Sources */}
       {episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0 && (
-        <SourcesSection sources={episode.sources as Source[]} />
+        <SourcesSection sources={episode.sources as unknown as Source[]} />
       )}
 
       {/* Learning Add-ons */}

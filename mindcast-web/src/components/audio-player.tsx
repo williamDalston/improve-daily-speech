@@ -46,16 +46,15 @@ const SLEEP_TIMER_OPTIONS = [
   { label: '60 min', minutes: 60 },
 ];
 
-// Ambient soundbed options - using free looping audio URLs
-// In production, these would be hosted assets
+// Ambient soundbed options
 const AMBIENT_SOUNDS = [
   { id: 'off', label: 'Off', emoji: '🔇', url: '' },
   { id: 'rain', label: 'Rain', emoji: '🌧️', url: '/audio/ambient/rain.mp3' },
   { id: 'cafe', label: 'Cafe', emoji: '☕', url: '/audio/ambient/cafe.mp3' },
-  { id: 'fire', label: 'Fireplace', emoji: '🔥', url: '/audio/ambient/fire.mp3' },
-  { id: 'forest', label: 'Forest', emoji: '🌲', url: '/audio/ambient/forest.mp3' },
-  { id: 'ocean', label: 'Ocean', emoji: '🌊', url: '/audio/ambient/ocean.mp3' },
-  { id: 'white', label: 'White Noise', emoji: '📻', url: '/audio/ambient/white-noise.mp3' },
+  { id: 'fire', label: 'Fireplace', emoji: '🔥', url: '/audio/ambient/fire.wav' },
+  { id: 'forest', label: 'Forest', emoji: '🌲', url: '/audio/ambient/forest.wav' },
+  { id: 'ocean', label: 'Ocean', emoji: '🌊', url: '/audio/ambient/ocean.wav' },
+  { id: 'white', label: 'White Noise', emoji: '📻', url: '/audio/ambient/white-noise.wav' },
 ];
 
 // Haptic feedback helper - subtle vibrations for key interactions

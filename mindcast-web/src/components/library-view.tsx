@@ -30,7 +30,7 @@ interface Episode {
   transcript: string | null;
   audioDurationSecs: number | null;
   createdAt: Date;
-  status: string;
+  status: 'DRAFT' | 'PROCESSING' | 'READY' | 'ERROR';
 }
 
 interface Playlist {
@@ -157,7 +157,7 @@ export function LibraryView({ episodes: initialEpisodes, className }: LibraryVie
       p.id === playlistId
         ? {
             ...p,
-            episodeIds: [...new Set([...p.episodeIds, ...selectedEpisodes])],
+            episodeIds: Array.from(new Set([...p.episodeIds, ...selectedEpisodes])),
           }
         : p
     );
