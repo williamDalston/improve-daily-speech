@@ -540,7 +540,7 @@ export function InstantHost({
   return (
     <div className="rounded-xl border-2 border-brand/30 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-4">
       {/* Host Header */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
         <div className="flex items-center gap-2">
           <div
             className={cn(
@@ -581,13 +581,13 @@ export function InstantHost({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 w-full sm:w-auto sm:justify-end">
           {/* Ambient sounds */}
           <div className="relative">
             <button
               onClick={() => setShowAmbientMenu(!showAmbientMenu)}
               className={cn(
-                'rounded-full p-2 transition-colors',
+                'inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors sm:h-9 sm:w-9',
                 ambientSound !== 'off' ? 'text-brand' : 'text-text-muted hover:text-text-primary'
               )}
               aria-label="Background sounds"
@@ -623,7 +623,7 @@ export function InstantHost({
               setMicEnabled(!micEnabled);
             }}
             className={cn(
-              'rounded-full p-2 transition-colors',
+              'inline-flex h-11 w-11 items-center justify-center rounded-full transition-colors sm:h-9 sm:w-9',
               micEnabled
                 ? 'text-success hover:bg-success/10'
                 : 'text-text-muted hover:bg-surface-secondary'
@@ -640,7 +640,7 @@ export function InstantHost({
           {/* Mute/unmute */}
           <button
             onClick={toggleMute}
-            className="rounded-full p-2 text-text-muted hover:bg-surface-secondary hover:text-text-primary transition-colors"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-muted hover:bg-surface-secondary hover:text-text-primary transition-colors sm:h-9 sm:w-9"
             aria-label={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? (
@@ -653,7 +653,7 @@ export function InstantHost({
           {/* Stop button */}
           <button
             onClick={stopAll}
-            className="rounded-full p-2 text-text-muted hover:bg-error/10 hover:text-error transition-colors"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-full text-text-muted hover:bg-error/10 hover:text-error transition-colors sm:h-9 sm:w-9"
             aria-label="Stop all audio"
           >
             <Square className="h-4 w-4 fill-current" />
@@ -713,7 +713,7 @@ export function InstantHost({
           <p className="text-sm text-text-primary text-center">
             Want to chat while your episode generates?
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
               onClick={async () => {
                 const granted = await requestMicPermission();
@@ -721,7 +721,7 @@ export function InstantHost({
                   startListening();
                 }
               }}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand px-3 py-2.5 text-sm text-white font-medium transition-all hover:bg-brand/90"
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand px-3 py-3 text-base text-white font-medium transition-all hover:bg-brand/90 sm:py-2.5 sm:text-sm"
             >
               <Mic className="h-4 w-4" />
               Enable voice
@@ -731,7 +731,7 @@ export function InstantHost({
                 setMicPermissionAsked(true);
                 setShowTextInput(true);
               }}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm text-text-primary font-medium transition-all hover:bg-surface-tertiary"
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-border px-3 py-3 text-base text-text-primary font-medium transition-all hover:bg-surface-tertiary sm:py-2.5 sm:text-sm"
             >
               Type instead
             </button>
@@ -744,7 +744,7 @@ export function InstantHost({
               // Continue to next phase
               generateAndSpeak('deep_dive');
             }}
-            className="w-full text-xs text-text-muted hover:text-text-secondary text-center py-1"
+            className="w-full text-sm text-text-muted hover:text-text-secondary text-center py-2 sm:text-xs sm:py-1"
           >
             Skip — just listen
           </button>
@@ -754,19 +754,19 @@ export function InstantHost({
       {/* Text Input for typing responses */}
       {showTextInput && phase === 'listening' && micPermissionAsked && (
         <div className="mt-3">
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleTextSubmit()}
               placeholder="Type your thought..."
-              className="flex-1 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand/30"
+              className="flex-1 rounded-xl border border-border bg-surface px-3 py-3 text-base text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand/30 sm:py-2.5 sm:text-sm"
             />
             <button
               onClick={handleTextSubmit}
               disabled={!textInput.trim()}
-              className="rounded-xl bg-brand px-4 py-2.5 text-sm text-white font-medium transition-all hover:bg-brand/90 disabled:opacity-50"
+              className="w-full rounded-xl bg-brand px-4 py-3 text-base text-white font-medium transition-all hover:bg-brand/90 disabled:opacity-50 sm:w-auto sm:py-2.5 sm:text-sm"
             >
               Send
             </button>
@@ -776,7 +776,7 @@ export function InstantHost({
               const nextPhase = phaseCountRef.current < 2 ? 'deep_dive' : 'curiosity';
               generateAndSpeak(nextPhase);
             }}
-            className="w-full text-xs text-text-muted hover:text-text-secondary text-center py-2 mt-1"
+            className="w-full text-sm text-text-muted hover:text-text-secondary text-center py-2 mt-1 sm:text-xs"
           >
             Skip — continue listening
           </button>
@@ -787,25 +787,25 @@ export function InstantHost({
       {micEnabled && phase === 'listening' && micPermissionAsked && !showTextInput && (
         <div className="mt-3 space-y-2">
           {isListening ? (
-            <div className="flex items-center justify-center gap-2 py-3 rounded-xl bg-success/10 border border-success/30">
+            <div className="flex items-center justify-center gap-2 py-4 rounded-xl bg-success/10 border border-success/30 sm:py-3">
               <div className="w-3 h-3 rounded-full bg-success animate-pulse" />
-              <span className="text-sm text-success font-medium">
+              <span className="text-base text-success font-medium sm:text-sm">
                 {userSpeech || 'Listening...'}
               </span>
             </div>
           ) : (
             <button
               onClick={startListening}
-              className="w-full flex items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-brand font-medium transition-all hover:bg-brand/10"
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-4 py-4 text-base text-brand font-medium transition-all hover:bg-brand/10 sm:py-3 sm:text-sm"
             >
               <Mic className="h-5 w-5" />
               Tap to speak
             </button>
           )}
-          <div className="flex gap-2 text-xs">
+          <div className="flex gap-2 text-sm sm:text-xs">
             <button
               onClick={() => setShowTextInput(true)}
-              className="flex-1 text-text-muted hover:text-text-secondary text-center py-1"
+              className="flex-1 text-text-muted hover:text-text-secondary text-center py-2 sm:py-1"
             >
               Type instead
             </button>
@@ -815,7 +815,7 @@ export function InstantHost({
                 const nextPhase = phaseCountRef.current < 2 ? 'deep_dive' : 'curiosity';
                 generateAndSpeak(nextPhase);
               }}
-              className="flex-1 text-text-muted hover:text-text-secondary text-center py-1"
+              className="flex-1 text-text-muted hover:text-text-secondary text-center py-2 sm:py-1"
             >
               Skip — continue
             </button>
