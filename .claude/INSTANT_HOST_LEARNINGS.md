@@ -204,28 +204,43 @@ useEffect(() => {
 
 ---
 
-## Issue 7: ElevenLabs API Configuration
+## Issue 7: TTS Provider Selection (Cost vs Quality)
 
-### Required Environment Variable
-```
-ELEVENLABS_API_KEY=your_key_here
-```
+### The Problem
+ElevenLabs has the best quality but is expensive (~$0.30/1K chars) and has strict quotas.
+Running out of quota mid-conversation breaks the experience.
 
-### Recommended Settings
+### Solution: Use OpenAI TTS as Default
+OpenAI TTS is ~5-10x cheaper (~$0.03/1K chars with tts-1-hd) with good quality.
+
+### Configuration
 ```typescript
-{
-  model_id: 'eleven_turbo_v2_5', // Fast, high-quality
-  voice_settings: {
-    stability: 0.5,        // Balance between consistency and variation
-    similarity_boost: 0.75, // How closely to match original voice
-    style: 0.5,            // Expressiveness
-    use_speaker_boost: true
-  }
-}
+// Default: OpenAI TTS (cost-effective)
+await generateAudio(text, {
+  provider: 'openai',
+  voice: 'nova',  // Warm female voice
+  speed: 1.0,
+});
+
+// Optional: ElevenLabs for premium (if explicitly needed)
+await generateAudio(text, {
+  provider: 'elevenlabs',
+  voice: 'rachel',
+  stability: 0.5,
+  similarityBoost: 0.75,
+});
 ```
 
-### Voice Options
-- `rachel` - Warm, engaging female (recommended for conversational)
+### OpenAI Voice Options
+- `nova` - Warm female (recommended, similar to ElevenLabs Rachel)
+- `onyx` - Deep male
+- `alloy` - Neutral
+- `shimmer` - Bright female
+- `echo` - Male
+- `fable` - British
+
+### ElevenLabs Voice Options (if budget allows)
+- `rachel` - Warm, engaging female
 - `drew` - Confident male
 - `paul` - Natural, conversational male
 
@@ -286,16 +301,40 @@ If stuck at 88%, check the AUDIO step / ElevenLabs API.
 
 ---
 
+## Issue 9: Cost Optimization Strategies for Scaling
+
+### Current Costs (per 1K characters)
+- ElevenLabs: ~$0.30 (highest quality)
+- OpenAI TTS: ~$0.03 (good quality) ← **Current default**
+- Google TTS: ~$0.004-0.016 (acceptable quality)
+- Browser TTS: Free (robotic, avoid)
+
+### Strategies for High-Volume Usage
+1. **Default to OpenAI TTS** - Already implemented, 10x cheaper than ElevenLabs
+2. **Text length limits** - InstantHost capped at 800 chars per request
+3. **Response caching** - Cache common phrases/greetings
+4. **User rate limits** - Limit conversations per day for free users
+5. **Usage tracking** - Monitor per-user TTS consumption
+6. **Tiered quality** - Free users get OpenAI, Pro gets ElevenLabs option
+
+### Future Considerations
+- Browser TTS for non-critical audio (sound effects, notifications)
+- Pre-generated audio for common intros/outros
+- Conversation length limits (e.g., 10 exchanges per session)
+
+---
+
 ## Best Practices Summary
 
-1. **Single TTS Source**: Use only ElevenLabs, no browser fallback
+1. **Single TTS Source**: Use only one provider per session, no browser fallback
 2. **Comprehensive Stop**: Clear all audio, timers, and recognition on stop
 3. **Valid Model Names**: Always use full Anthropic model IDs with dates
 4. **Hook Order**: Declare callbacks in dependency order
 5. **Conversation State**: Track history for context-aware responses
 6. **Multiple Input Methods**: Voice + text for accessibility
 7. **Natural Pauses**: Don't have host talk non-stop, wait for responses
-8. **Chunk Long TTS**: Split transcripts into ~2500 char chunks for ElevenLabs
+8. **Chunk Long TTS**: Split transcripts into ~2500-4000 char chunks
+9. **Cost-Aware Defaults**: Use OpenAI TTS by default, ElevenLabs only when needed
 
 ---
 

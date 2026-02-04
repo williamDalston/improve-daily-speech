@@ -1,6 +1,7 @@
 /**
  * Unified Text-to-Speech
- * All TTS is handled by ElevenLabs.
+ * Default: OpenAI TTS (cost-effective, good quality)
+ * Optional: ElevenLabs (best quality but expensive/limited quota)
  */
 
 import OpenAI from 'openai';
@@ -293,18 +294,27 @@ async function generateWithOpenAI(
 // ============================================================================
 
 /**
- * Generate audio from text (ElevenLabs only)
+ * Generate audio from text
+ * Default: OpenAI TTS (cost-effective at ~$0.03/1K chars)
+ * Fallback: ElevenLabs if OpenAI unavailable
  */
 export async function generateAudio(
   text: string,
   options: GenerateAudioOptions = {}
 ): Promise<Buffer> {
-  const { voice, voiceId, stability, similarityBoost } = options;
+  const { provider = 'openai', voice, speed = 1.0 } = options;
 
-  if (!process.env.ELEVENLABS_API_KEY) {
-    throw new Error('ELEVENLABS_API_KEY not configured');
+  // Use OpenAI by default (much cheaper than ElevenLabs)
+  if (provider === 'openai' || !process.env.ELEVENLABS_API_KEY) {
+    return generateWithOpenAI(
+      text,
+      (voice as OpenAIVoice) || 'nova', // nova = warm female, similar to rachel
+      speed
+    );
   }
 
+  // ElevenLabs fallback (if explicitly requested and API key available)
+  const { voiceId, stability, similarityBoost } = options;
   return generateWithElevenLabs(
     text,
     (voice as ElevenLabsVoice) || 'rachel',
@@ -315,6 +325,7 @@ export async function generateAudio(
 /**
  * Generate quick preview audio (first ~30 seconds)
  * For immediate feedback while full content generates
+ * Uses OpenAI TTS for fast, cost-effective preview
  */
 export async function generatePreviewAudio(
   text: string,
@@ -331,7 +342,8 @@ export async function generatePreviewAudio(
     ? previewText.slice(0, lastSentenceEnd + 1)
     : previewText;
 
-  return generateAudio(cleanPreview, options);
+  // Force OpenAI for previews (fast + cheap)
+  return generateAudio(cleanPreview, { ...options, provider: 'openai' });
 }
 
 /**

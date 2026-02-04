@@ -21,13 +21,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Text too long' }, { status: 413 });
     }
 
-    // Use ElevenLabs for the most natural, human-like voice
-    // Rachel voice: warm, engaging - perfect for conversational host
+    // Use OpenAI TTS - cost-effective with good quality
+    // Nova voice: warm female, similar to ElevenLabs Rachel
     const audioBuffer = await generateAudio(trimmed, {
-      provider: 'elevenlabs',
-      voice: 'rachel',
-      stability: 0.5,        // Balanced stability
-      similarityBoost: 0.75, // Natural variation
+      provider: 'openai',
+      voice: 'nova',
+      speed: 1.0,
     });
 
     return new NextResponse(new Uint8Array(audioBuffer), {
