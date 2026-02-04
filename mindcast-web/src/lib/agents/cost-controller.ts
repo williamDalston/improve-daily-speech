@@ -31,10 +31,10 @@ const PRICING = {
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
   'gpt-4-turbo': { input: 0.01, output: 0.03 },
 
-  // Anthropic
-  'claude-3-5-sonnet': { input: 0.003, output: 0.015 },
-  'claude-3-haiku': { input: 0.00025, output: 0.00125 },
-  'claude-3-opus': { input: 0.015, output: 0.075 },
+  // Anthropic (current models)
+  'claude-sonnet-4-5-20250929': { input: 0.003, output: 0.015 },
+  'claude-haiku-4-5-20251001': { input: 0.001, output: 0.005 },
+  'claude-opus-4-5-20251101': { input: 0.005, output: 0.025 },
 
   // TTS
   'elevenlabs': 0.30, // per 1K characters (~150 words)
@@ -99,7 +99,7 @@ export function estimateEpisodeCost(params: {
   const {
     lengthMinutes,
     researchModel = 'gpt-4o-mini',
-    draftingModel = 'claude-3-5-sonnet',
+    draftingModel = 'claude-sonnet-4-5-20250929',
     enhancementModel = 'gpt-4o-mini',
     ttsProvider = 'openai-tts',
   } = params;

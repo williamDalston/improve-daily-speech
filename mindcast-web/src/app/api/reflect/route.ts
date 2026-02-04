@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 4096,
       temperature: 0.7,
       system: `You are a wise counselor who helps people gain clarity on their situations through philosophical lenses. Your analyses are deep, practical, and compassionate. You don't preach—you illuminate.

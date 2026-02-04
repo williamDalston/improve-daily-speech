@@ -40,7 +40,7 @@ function getOpenAIClient(): OpenAI {
   return openaiClient;
 }
 
-const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-sonnet-20241022';
+const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5-20250929';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-2024-11-20';
 const FAST_OPENAI_MODEL = 'gpt-4o-mini'; // For quick tasks like judging
 const MAX_TOKENS = 16384;
