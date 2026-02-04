@@ -16,39 +16,52 @@ export async function POST(request: NextRequest) {
     let prompt: string;
 
     if (phase === 'intro') {
-      // First thing they hear - hook them immediately
-      prompt = `You are an enthusiastic, knowledgeable host about to create an episode on "${topic}".
+      // First thing they hear - engage them personally
+      prompt = `You are a warm, curious podcast host who's about to create an episode on "${topic}" for someone.
 
-Generate a SHORT (30-40 words max) spoken intro that:
-1. Acknowledges the topic with genuine excitement
-2. Shares ONE fascinating hook or surprising fact
-3. Builds anticipation ("Let me dig into this for you...")
+Generate a SHORT (35-45 words max) spoken greeting that:
+1. Greets them warmly and acknowledges their topic choice: "So, ${topic}! I love it."
+2. Shows genuine curiosity - wonder aloud why they might be interested in this
+3. Let them know you're diving in: "Give me a moment to put something special together for you..."
 
-Sound natural and conversational, like you're talking to a friend. No filler words. Get to the interesting stuff fast.
+Sound like a friend who's genuinely interested in THEM, not just the topic. Warm, personal, curious.
 
 Just output the spoken text, nothing else.`;
     } else if (phase === 'deep_dive') {
-      // While they wait longer - share real knowledge
-      prompt = `You are a knowledgeable host researching "${topic}" right now.
+      // While they wait longer - have a conversation WITH them
+      prompt = `You're a curious host creating an episode on "${topic}" and want to connect with the listener.
 
 Generate a SHORT (40-50 words) spoken segment that:
-1. Shares a genuinely interesting insight or lesser-known fact
-2. Connects it to why it matters
-3. Hints that you're finding even more interesting stuff
+1. Check in with them: "While I'm putting this together..."
+2. Ask them a thought-provoking question about why this topic matters to them, or what sparked their curiosity
+3. Share YOUR genuine enthusiasm about what you're discovering
 
-Sound like you're actively discovering and excited to share. Natural speech, no jargon.
+This should feel like a conversation, not a lecture. Ask questions. Wonder together.
+
+Just output the spoken text, nothing else.`;
+    } else if (phase === 'curiosity') {
+      // Keep the conversation going naturally while still waiting
+      prompt = `You're a curious host still working on an episode about "${topic}" and want to keep the listener engaged.
+
+Generate a SHORT (35-45 words) spoken segment that does ONE of these (pick randomly):
+- Share a surprising connection you just found between ${topic} and something unexpected
+- Ask them a "what if" question related to the topic
+- Wonder aloud about something fascinating you're discovering
+- Share your genuine reaction to something you just learned
+
+Keep it conversational and curious. You're thinking out loud WITH them, not lecturing.
 
 Just output the spoken text, nothing else.`;
     } else if (phase === 'almost_ready') {
-      // Near the end - build anticipation
-      prompt = `You just finished creating an in-depth episode about "${topic}".
+      // Near the end - build anticipation with warmth
+      prompt = `You just finished creating an in-depth episode about "${topic}" and you're excited to share it.
 
-Generate a SHORT (25-35 words) spoken transition that:
-1. Expresses satisfaction with what you've put together
-2. Teases one thing they'll learn
-3. Asks if they're ready to hear the full episode
+Generate a SHORT (30-40 words) spoken transition that:
+1. Express genuine excitement: "Okay, I think you're going to love this..."
+2. Tease ONE specific thing you can't wait for them to hear
+3. Ask warmly if they're ready: "Ready to dive in?"
 
-Natural, warm, excited tone. Like a friend who can't wait to share something cool.
+Sound like a friend who just found something amazing and can't wait to show them.
 
 Just output the spoken text, nothing else.`;
     } else {

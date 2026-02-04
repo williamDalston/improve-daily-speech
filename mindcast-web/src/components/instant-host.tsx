@@ -11,7 +11,7 @@ interface InstantHostProps {
   onReadyToPlay: () => void;
 }
 
-type HostPhase = 'idle' | 'intro' | 'deep_dive' | 'almost_ready' | 'asking';
+type HostPhase = 'idle' | 'intro' | 'deep_dive' | 'curiosity' | 'almost_ready' | 'asking';
 
 export function InstantHost({
   topic,
@@ -24,11 +24,13 @@ export function InstantHost({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   const hasStartedRef = useRef(false);
   const phaseTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const phaseCountRef = useRef(0); // Track how many phases we've done
 
   const stopAudioPlayback = useCallback(() => {
     if (audioRef.current) {
@@ -75,11 +77,12 @@ export function InstantHost({
   }, [isMuted]);
 
   // Generate and speak content for a phase
-  const generateAndSpeak = useCallback(async (targetPhase: HostPhase) => {
+  const generateAndSpeak = useCallback(async (targetPhase: HostPhase, onComplete?: () => void) => {
     if (targetPhase === 'idle' || targetPhase === 'asking') return;
 
     try {
       setPhase(targetPhase);
+      setIsLoadingAudio(true);
       stopAudioPlayback();
 
       // Get topic-specific content from API
@@ -96,13 +99,29 @@ export function InstantHost({
       const { text } = await response.json();
       setCurrentText(text);
 
-      if (isMuted) return;
+      if (isMuted) {
+        setIsLoadingAudio(false);
+        onComplete?.();
+        return;
+      }
 
+      // Determine next phase based on current phase
       const handlePhaseEnd = () => {
-        if (targetPhase === 'intro' && !episodeReady) {
+        phaseCountRef.current += 1;
+
+        // Call completion callback if provided (for almost_ready -> asking)
+        if (onComplete) {
+          onComplete();
+          return;
+        }
+
+        // Natural flow: intro -> deep_dive -> curiosity -> (loop curiosity if needed)
+        if (!episodeReady) {
+          const nextPhase = targetPhase === 'intro' ? 'deep_dive' : 'curiosity';
+          // Small pause between segments (2 seconds feels natural)
           phaseTimerRef.current = setTimeout(() => {
-            generateAndSpeak('deep_dive');
-          }, 8000);
+            generateAndSpeak(nextPhase);
+          }, 2000);
         }
       };
 
@@ -111,6 +130,8 @@ export function InstantHost({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
+
+      setIsLoadingAudio(false);
 
       if (!ttsResponse.ok) {
         throw new Error('Failed to generate voice audio');
@@ -131,6 +152,7 @@ export function InstantHost({
       };
       audio.onerror = () => {
         setIsPlaying(false);
+        setIsLoadingAudio(false);
         fallbackToSpeechSynthesis(text, handlePhaseEnd);
       };
 
@@ -141,6 +163,7 @@ export function InstantHost({
       }
     } catch (err) {
       console.error('Instant host error:', err);
+      setIsLoadingAudio(false);
       setError('Could not start voice host');
     }
   }, [topic, isMuted, episodeReady, stopAudioPlayback, fallbackToSpeechSynthesis]);
@@ -167,21 +190,42 @@ export function InstantHost({
 
   // When episode is ready, do the transition
   useEffect(() => {
-    if (episodeReady && isGenerating) {
+    if (episodeReady && isGenerating && phase !== 'almost_ready' && phase !== 'asking') {
       // Clear any pending phase transitions
       if (phaseTimerRef.current) {
         clearTimeout(phaseTimerRef.current);
       }
-      window.speechSynthesis?.cancel();
-      stopAudioPlayback();
 
-      // Generate the "ready to hear?" prompt
-      setTimeout(() => {
-        generateAndSpeak('almost_ready');
-        setPhase('asking');
-      }, 500);
+      // Wait for current audio to finish naturally, or if nothing playing, start immediately
+      const startTransition = () => {
+        window.speechSynthesis?.cancel();
+        stopAudioPlayback();
+
+        // Generate "almost_ready" and ONLY set to 'asking' when audio finishes
+        generateAndSpeak('almost_ready', () => {
+          setPhase('asking');
+        });
+      };
+
+      if (isPlaying) {
+        // Let current segment finish, then transition
+        const checkAudioEnd = setInterval(() => {
+          if (!audioRef.current || audioRef.current.ended || audioRef.current.paused) {
+            clearInterval(checkAudioEnd);
+            startTransition();
+          }
+        }, 100);
+        // Safety timeout - don't wait more than 10 seconds
+        setTimeout(() => {
+          clearInterval(checkAudioEnd);
+          startTransition();
+        }, 10000);
+      } else {
+        // Nothing playing, start immediately
+        setTimeout(startTransition, 300);
+      }
     }
-  }, [episodeReady, isGenerating, generateAndSpeak, stopAudioPlayback]);
+  }, [episodeReady, isGenerating, phase, isPlaying, generateAndSpeak, stopAudioPlayback]);
 
   // Cleanup
   useEffect(() => {
@@ -238,7 +282,13 @@ export function InstantHost({
               {phase === 'asking' ? 'Your episode is ready!' : 'Your AI Host'}
             </p>
             <p className="text-xs text-text-muted">
-              {isPlaying ? 'Speaking...' : phase === 'asking' ? 'Tap to listen' : 'Preparing...'}
+              {isPlaying
+                ? 'Speaking...'
+                : isLoadingAudio
+                  ? 'Thinking...'
+                  : phase === 'asking'
+                    ? 'Tap to listen'
+                    : 'Preparing...'}
             </p>
           </div>
         </div>
@@ -276,10 +326,16 @@ export function InstantHost({
       )}
 
       {/* Loading indicator for content generation */}
-      {!currentText && phase !== 'idle' && (
+      {(isLoadingAudio || (!currentText && phase !== 'idle' && phase !== 'asking')) && (
         <div className="flex items-center justify-center gap-2 py-2">
           <Loader2 className="h-4 w-4 animate-spin text-brand" />
-          <span className="text-sm text-text-muted">Getting ready to talk about {topic.slice(0, 30)}...</span>
+          <span className="text-sm text-text-muted">
+            {phase === 'intro'
+              ? `Getting ready to talk about ${topic.slice(0, 25)}...`
+              : phase === 'almost_ready'
+                ? 'Almost there...'
+                : 'Gathering thoughts...'}
+          </span>
         </div>
       )}
     </div>
