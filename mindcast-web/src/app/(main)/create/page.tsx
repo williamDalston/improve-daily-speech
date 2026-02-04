@@ -320,6 +320,10 @@ export default function CreatePage() {
   const [connectionLost, setConnectionLost] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 
+  // Actual job progress from API (0-100)
+  const [jobProgress, setJobProgress] = useState(0);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+
   // Restore topic from localStorage on mount (preserves across login redirect)
   useEffect(() => {
     const savedTopic = localStorage.getItem('mindcast_pending_topic');
@@ -409,8 +413,33 @@ export default function CreatePage() {
   }, [pendingAutoGenerate, session?.user, topic, isGenerating]);
 
   const completedSteps = steps.filter((s) => s.status === 'done').length;
-  const progress = (completedSteps / steps.length) * 100;
+  const stepsProgress = (completedSteps / steps.length) * 100;
+  // Use actual job progress from API, fallback to steps-based calculation
+  const progress = jobProgress > 0 ? jobProgress : stepsProgress;
   const currentStep = steps.find((s) => s.status === 'running');
+
+  // Calculate estimated time remaining
+  const getTimeEstimate = (): string => {
+    if (!generationStartTime || progress === 0 || progress >= 100) return '';
+
+    const elapsedMs = Date.now() - generationStartTime;
+    const elapsedSecs = elapsedMs / 1000;
+
+    // Estimate total time based on current progress
+    const estimatedTotalSecs = (elapsedSecs / progress) * 100;
+    const remainingSecs = Math.max(0, estimatedTotalSecs - elapsedSecs);
+
+    if (remainingSecs < 60) {
+      return 'Less than a minute left';
+    } else if (remainingSecs < 120) {
+      return 'About 1 minute left';
+    } else {
+      const mins = Math.ceil(remainingSecs / 60);
+      return `About ${mins} minutes left`;
+    }
+  };
+
+  const timeEstimate = getTimeEstimate();
 
   // Poll job status and update UI
   const pollJobStatus = useCallback(async (jobId: string) => {
@@ -442,6 +471,11 @@ export default function CreatePage() {
       // Update footprints for AI transparency
       if (data.footprints && Array.isArray(data.footprints)) {
         setFootprints(data.footprints);
+      }
+
+      // Update actual job progress from API
+      if (typeof data.progress === 'number') {
+        setJobProgress(data.progress);
       }
 
       // Update progress based on job status
@@ -605,6 +639,8 @@ export default function CreatePage() {
     setTipIndex(0);
     setConnectionLost(false);
     setCurrentJobId(null);
+    setJobProgress(0);
+    setGenerationStartTime(Date.now());
     setSteps(PIPELINE_STEPS.map((s) => ({ ...s, status: 'pending' })));
 
     try {
@@ -1048,7 +1084,7 @@ export default function CreatePage() {
                         Quick
                       </span>
                     </div>
-                    <span className="text-xs text-text-muted">Faster, good quality</span>
+                    <span className="text-xs text-text-muted">~3-5 min, good quality</span>
                   </button>
                   <button
                     onClick={() => setGenerationMode('deep')}
@@ -1066,7 +1102,7 @@ export default function CreatePage() {
                         Deep
                       </span>
                     </div>
-                    <span className="text-xs text-text-muted">More polished, thorough</span>
+                    <span className="text-xs text-text-muted">~8-12 min, best quality</span>
                   </button>
                 </div>
               </div>
@@ -1161,13 +1197,19 @@ export default function CreatePage() {
                     <p className="text-sm text-text-secondary">{CurrentTip.text}</p>
                   </div>
 
-                  {/* Progress bar with percentage */}
+                  {/* Progress bar with percentage and time estimate */}
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs text-text-muted">
                       <span>{currentStep?.name || 'Starting'}...</span>
                       <span>{Math.round(progress)}%</span>
                     </div>
                     <Progress value={progress} className="h-2" />
+                    {timeEstimate && (
+                      <div className="flex items-center justify-center gap-1 text-xs text-text-muted pt-1">
+                        <Clock className="h-3 w-3" />
+                        <span>{timeEstimate}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Compact step indicators */}

@@ -68,6 +68,7 @@ export interface GenerateAudioOptions {
   speed?: number; // 0.25 to 4.0
   stability?: number; // ElevenLabs: 0-1, higher = more stable
   similarityBoost?: number; // ElevenLabs: 0-1, higher = more similar to original
+  fastMode?: boolean; // Use tts-1 (faster) instead of tts-1-hd (better quality)
 }
 
 // ============================================================================
@@ -267,15 +268,19 @@ async function generateWithGoogle(
 async function generateWithOpenAI(
   text: string,
   voice: OpenAIVoice = 'onyx',
-  speed: number = 1.0
+  speed: number = 1.0,
+  fastMode: boolean = false
 ): Promise<Buffer> {
   const client = getOpenAIClient();
   const chunks = splitForTTS(text, 4000);
   const audioBuffers: Buffer[] = [];
 
+  // tts-1 is faster (2x) but slightly lower quality than tts-1-hd
+  const model = fastMode ? 'tts-1' : 'tts-1-hd';
+
   for (const chunk of chunks) {
     const response = await client.audio.speech.create({
-      model: 'tts-1-hd',
+      model,
       voice,
       input: chunk,
       speed,
@@ -302,14 +307,15 @@ export async function generateAudio(
   text: string,
   options: GenerateAudioOptions = {}
 ): Promise<Buffer> {
-  const { provider = 'openai', voice, speed = 1.0 } = options;
+  const { provider = 'openai', voice, speed = 1.0, fastMode = false } = options;
 
   // Use OpenAI by default (much cheaper than ElevenLabs)
   if (provider === 'openai' || !process.env.ELEVENLABS_API_KEY) {
     return generateWithOpenAI(
       text,
       (voice as OpenAIVoice) || 'nova', // nova = warm female, similar to rachel
-      speed
+      speed,
+      fastMode
     );
   }
 

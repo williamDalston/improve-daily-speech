@@ -300,27 +300,31 @@ export async function processJob(
       return;
     }
 
-    // 3. Update preview audio with enhanced version (replaces early draft preview)
-    await updateJobStatus(jobId, 'AUDIO', 85, 'Upgrading preview audio...');
-    await addFootprint(jobId, 'Audio Upgrade', 'Upgrading preview with polished script...');
-    const previewBuffer = await generatePreviewAudio(finalText);
-    const previewBase64 = previewBuffer.toString('base64');
+    // 3. Update preview audio with enhanced version (skip in quick mode for speed)
+    if (!isQuickMode) {
+      await updateJobStatus(jobId, 'AUDIO', 85, 'Upgrading preview audio...');
+      await addFootprint(jobId, 'Audio Upgrade', 'Upgrading preview with polished script...');
+      const previewBuffer = await generatePreviewAudio(finalText);
+      const previewBase64 = previewBuffer.toString('base64');
 
-    await db.job.update({
-      where: { id: jobId },
-      data: { previewAudio: previewBase64 },
-    });
-    await addFootprint(jobId, 'Preview Upgraded', 'Preview audio upgraded with final polished script!');
+      await db.job.update({
+        where: { id: jobId },
+        data: { previewAudio: previewBase64 },
+      });
+      await addFootprint(jobId, 'Preview Upgraded', 'Preview audio upgraded with final polished script!');
 
-    // Check for cancellation
-    if (await checkCancelled()) {
-      return;
+      // Check for cancellation
+      if (await checkCancelled()) {
+        return;
+      }
     }
 
-    // 4. Generate full audio
-    await updateJobStatus(jobId, 'AUDIO', 92, 'Generating full audio...');
-    await addFootprint(jobId, 'Full Audio', 'Generating complete high-quality audio...');
-    const audioBuffer = await generateAudio(finalText);
+    // 4. Generate full audio (use fast TTS in quick mode)
+    await updateJobStatus(jobId, 'AUDIO', isQuickMode ? 70 : 92, 'Generating full audio...');
+    await addFootprint(jobId, 'Full Audio', isQuickMode
+      ? 'Generating audio with fast TTS...'
+      : 'Generating complete high-quality audio...');
+    const audioBuffer = await generateAudio(finalText, { fastMode: isQuickMode });
     const audioBase64 = audioBuffer.toString('base64');
     const audioDuration = estimateAudioDuration(finalText);
     await addFootprint(jobId, 'Episode Complete', `Your ${Math.round(audioDuration / 60)}-minute episode is ready!`);
