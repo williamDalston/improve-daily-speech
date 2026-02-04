@@ -83,33 +83,38 @@ function mapStepToStatus(stepType: string): JobStatus {
 }
 
 /**
- * Get descriptive footprint message for enhancement stages
+ * Get descriptive footprint message for enhancement stages (OPTIMIZED: now 2 stages)
  */
 function getEnhancementFootprint(stageName: string): string {
   const footprints: Record<string, string> = {
-    'Stage 2: Deep Enhancement': 'Adding academic depth and memorable examples...',
-    'Stage 3: De-AI & Voice': 'Removing AI patterns, adding authentic voice...',
-    'Stage 4: Oral Delivery': 'Optimizing rhythm and breathing points for audio...',
-    'Stage 5: Final Polish': 'Final refinements for maximum impact...',
+    'Stage 2: Enhancement & Voice': 'Adding depth and authentic human voice...',
+    'Stage 3: Audio Polish': 'Final polish for perfect audio delivery...',
   };
   return footprints[stageName] || 'Refining the script...';
 }
 
 /**
  * Calculate progress percentage based on current step
+ * OPTIMIZED: Updated for 2 enhancement stages instead of 4
  */
-function calculateProgress(stepType: string, stepStatus: string): number {
+function calculateProgress(stepType: string, stepStatus: string, stageIndex?: number): number {
+  // New faster pipeline: Research(15) -> Drafts(35) -> Judge(45) -> Enhance1(60) -> Enhance2(75) -> Audio(90) -> Done(100)
   const stepWeights: Record<string, number> = {
-    research: 10,
-    drafts: 25,
-    judge: 35,
-    enhancement: 70, // Spans multiple sub-stages
-    critique: 70,
+    research: 15,
+    drafts: 35,
+    judge: 45,
+    enhancement: 60, // Base for first enhancement
     audio: 90,
     done: 100,
   };
 
-  const base = stepWeights[stepType] || 50;
+  let base = stepWeights[stepType] || 50;
+
+  // For enhancement stages, add offset based on stage index
+  if (stepType === 'enhancement' && stageIndex !== undefined) {
+    base = 55 + (stageIndex * 15); // Stage 0 = 55, Stage 1 = 70
+  }
+
   return stepStatus === 'done' ? base + 5 : base;
 }
 
@@ -180,7 +185,8 @@ export async function processJob(
 
       const status = mapStepToStatus(step.type);
       const stepStatus = step.type === 'done' ? 'done' : step.status;
-      const progress = calculateProgress(step.type, stepStatus);
+      const stageIndex = 'stageIndex' in step ? step.stageIndex : undefined;
+      const progress = calculateProgress(step.type, stepStatus, stageIndex);
       const currentStep = ('stageName' in step ? step.stageName : undefined) || step.type;
 
       await updateJobStatus(jobId, status, progress, currentStep);
@@ -230,6 +236,23 @@ export async function processJob(
           data: { selectedDraft: step.winner || '' },
         });
         await addFootprint(jobId, 'Winner Selected', `${step.winner}'s version chosen as the stronger narrative`);
+
+        // Generate preview audio EARLY from winning draft (user can listen while we enhance)
+        if (step.winnerText) {
+          try {
+            await addFootprint(jobId, 'Quick Preview', 'Creating audio preview so you can listen while we polish...');
+            const previewBuffer = await generatePreviewAudio(step.winnerText);
+            const previewBase64 = previewBuffer.toString('base64');
+            await db.job.update({
+              where: { id: jobId },
+              data: { previewAudio: previewBase64 },
+            });
+            await addFootprint(jobId, 'Preview Ready', 'Preview audio ready - listen now while we refine the script!');
+          } catch (e) {
+            // Non-critical, continue without early preview
+            console.log('Early preview generation failed:', e);
+          }
+        }
       }
 
       if (step.type === 'enhancement' && step.status === 'running') {
@@ -264,9 +287,9 @@ export async function processJob(
       return;
     }
 
-    // 3. Generate preview audio
-    await updateJobStatus(jobId, 'AUDIO', 85, 'Generating preview audio...');
-    await addFootprint(jobId, 'Voice Preview', 'Creating a quick audio preview so you can start listening...');
+    // 3. Update preview audio with enhanced version (replaces early draft preview)
+    await updateJobStatus(jobId, 'AUDIO', 85, 'Upgrading preview audio...');
+    await addFootprint(jobId, 'Audio Upgrade', 'Upgrading preview with polished script...');
     const previewBuffer = await generatePreviewAudio(finalText);
     const previewBase64 = previewBuffer.toString('base64');
 
@@ -274,7 +297,7 @@ export async function processJob(
       where: { id: jobId },
       data: { previewAudio: previewBase64 },
     });
-    await addFootprint(jobId, 'Preview Ready', 'Preview audio is ready - you can start listening now!');
+    await addFootprint(jobId, 'Preview Upgraded', 'Preview audio upgraded with final polished script!');
 
     // Check for cancellation
     if (await checkCancelled()) {

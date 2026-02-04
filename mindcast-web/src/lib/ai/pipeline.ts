@@ -42,6 +42,7 @@ function getOpenAIClient(): OpenAI {
 
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-2024-11-20';
+const FAST_OPENAI_MODEL = 'gpt-4o-mini'; // For quick tasks like judging
 const MAX_TOKENS = 16384;
 
 // ============================================================================
@@ -153,8 +154,10 @@ export async function runJudge(
   judgment: string;
   borrowNotes: string;
 }> {
+  // Use faster GPT-4o-mini for judging (doesn't need full model power)
   const judgment = await callLLM({
-    provider: 'anthropic',
+    provider: 'openai',
+    model: FAST_OPENAI_MODEL,
     system: JUDGE_PROMPT.system,
     user: JUDGE_PROMPT.userTemplate
       .replace('{topic}', topic)
@@ -199,11 +202,11 @@ export async function runCritique(
   });
 }
 
+// OPTIMIZED: No longer requires separate critique step
 export async function runEnhancementStage(
   stageIndex: number,
   topic: string,
   research: string,
-  critique: string,
   previousOutput: string
 ): Promise<string> {
   const stage = ENHANCEMENT_STAGES[stageIndex];
@@ -213,7 +216,6 @@ export async function runEnhancementStage(
     user: stage.userTemplate
       .replace('{topic}', topic)
       .replace('{research}', research)
-      .replace('{critique}', critique)
       .replace('{previousOutput}', previousOutput),
     temperature: stage.temperature,
   });
@@ -226,7 +228,7 @@ export async function runEnhancementStage(
 export type PipelineStep =
   | { type: 'research'; status: 'running' | 'done'; research?: string }
   | { type: 'drafts'; status: 'running' | 'done'; drafts?: { label: string; text: string }[]; draftA?: string; draftB?: string }
-  | { type: 'judge'; status: 'running' | 'done'; winner?: string; judgment?: string }
+  | { type: 'judge'; status: 'running' | 'done'; winner?: string; winnerText?: string; judgment?: string }
   | { type: 'critique'; status: 'running' | 'done'; stageName: string; text?: string }
   | { type: 'enhancement'; status: 'running' | 'done'; stageName: string; stageIndex: number; text?: string; enhancedText?: string }
   | { type: 'done'; finalText: string };
@@ -253,24 +255,19 @@ export async function* runFullPipeline(
     type: 'judge',
     status: 'done',
     winner: judgeResult.winnerLabel,
+    winnerText: judgeResult.winnerText,
     judgment: judgeResult.judgment,
   };
 
   let currentText = judgeResult.winnerText;
 
-  // Enhancement Stages (2-5)
+  // OPTIMIZED: Only 2 enhancement stages (down from 4), no separate critique step
   for (let i = 0; i < ENHANCEMENT_STAGES.length; i++) {
     const stage = ENHANCEMENT_STAGES[i];
-    const prevStageName = i === 0 ? 'Draft Selection (Judge)' : ENHANCEMENT_STAGES[i - 1].name;
 
-    // Critique
-    yield { type: 'critique', status: 'running', stageName: stage.name };
-    const critique = await runCritique(topic, currentText, prevStageName, stage.name);
-    yield { type: 'critique', status: 'done', stageName: stage.name, text: critique };
-
-    // Enhancement
+    // Direct enhancement (critique is now embedded in the prompt)
     yield { type: 'enhancement', status: 'running', stageName: stage.name, stageIndex: i };
-    currentText = await runEnhancementStage(i, topic, research, critique, currentText);
+    currentText = await runEnhancementStage(i, topic, research, currentText);
     yield {
       type: 'enhancement',
       status: 'done',

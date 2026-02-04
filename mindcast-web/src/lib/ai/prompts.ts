@@ -89,117 +89,67 @@ Do not use headers. The script should be ready to read aloud immediately as cont
   };
 }
 
+// OPTIMIZED: Reduced from 4 stages to 2 for faster generation
 export const ENHANCEMENT_STAGES = [
   {
-    name: 'Stage 2: Deep Enhancement',
-    description: 'Adds artistic depth and academic rigor',
-    system: `You are an elite editor who transforms good documentary scripts into exceptional ones. You add artistic flourishes, deepen the intellectual content, and ensure every sentence earns its place. Your edits make scripts memorable and profound.`,
+    name: 'Stage 2: Enhancement & Voice',
+    description: 'Deep enhancement with authentic human voice',
+    system: `You are an elite documentary editor who transforms good scripts into exceptional ones. You add intellectual depth while ensuring the voice sounds completely human - not AI-generated. Every sentence must earn its place and sound natural when spoken aloud.`,
     userTemplate: `Topic: '{topic}'
 
 Research brief for reference:
 {research}
-
-Critique from editor:
-{critique}
 
 Current script to enhance:
 {previousOutput}
 
 ---
 
-Enhance this script by:
-1. Adding more specific examples, studies, or data points from the research
-2. Deepening metaphors and making abstract concepts more vivid
-3. Strengthening transitions between ideas
-4. Adding moments of intellectual surprise or revelation
-5. Ensuring the narrative arc builds to meaningful conclusions
+Transform this script in ONE pass:
 
-Maintain the same length and flow. Output only the enhanced script, no commentary.`,
+CONTENT ENHANCEMENT:
+- Add specific examples, studies, or data points from the research
+- Deepen metaphors and make abstract concepts more vivid
+- Add moments of intellectual surprise or revelation
+
+HUMAN VOICE:
+- Remove any "firstly/secondly" structures or obvious AI patterns
+- Vary sentence rhythm - mix long flowing sentences with short punchy ones
+- Replace generic transitions with natural thought connections
+- Make the opening distinctive - avoid cliché hooks
+
+Output only the enhanced script, preserving length. No commentary.`,
     temperature: 0.7,
   },
   {
-    name: 'Stage 3: De-AI & Voice',
-    description: 'Strips LLM patterns, injects authentic voice',
-    system: `You are a voice authenticity specialist. Your job is to remove any traces of AI-generated patterns and inject genuine human voice and personality into scripts. You know what makes writing feel robotic and systematically eliminate it.`,
+    name: 'Stage 3: Audio Polish',
+    description: 'Optimizes for spoken delivery and final refinement',
+    system: `You are a speech coach and perfectionist editor. You optimize scripts for the human voice while making final refinements. Every word must flow naturally and sound great through headphones.`,
     userTemplate: `Topic: '{topic}'
 
 Research brief for reference:
 {research}
 
-Critique pointing out issues:
-{critique}
-
-Current script to de-AI:
+Script to polish for audio:
 {previousOutput}
 
 ---
 
-Transform this script to sound completely human-written:
-1. Remove any "firstly/secondly" structures or obvious enumeration
-2. Vary sentence rhythm - mix long flowing sentences with short punchy ones
-3. Add subtle personality quirks and conversational asides
-4. Replace generic transitions with more natural thought connections
-5. Eliminate any phrases that sound like AI hedging or over-qualifying
-6. Make the opening especially distinctive - avoid cliché hooks
+Make final optimizations in ONE pass:
 
-Output only the transformed script, preserving length and core content.`,
-    temperature: 0.8,
-  },
-  {
-    name: 'Stage 4: Oral Delivery',
-    description: 'Optimizes for spoken delivery - breath, rhythm, flow',
-    system: `You are a speech coach and audio production expert. You optimize scripts for the human voice - ensuring natural breathing points, rhythmic variety, and words that feel good to speak aloud. You know what sounds great through headphones.`,
-    userTemplate: `Topic: '{topic}'
+AUDIO DELIVERY:
+- Ensure natural breathing points every 15-20 words
+- Avoid tongue-twisters and awkward consonant clusters
+- Create rhythmic variety - the script should have musicality
 
-Research brief for reference:
-{research}
-
-Critique from speech coach:
-{critique}
-
-Current script to optimize for audio:
-{previousOutput}
-
----
-
-Optimize this script for spoken delivery:
-1. Ensure natural breathing points every 15-20 words
-2. Avoid tongue-twisters and awkward consonant clusters
-3. Create rhythmic variety - the script should have musicality
-4. Add subtle emphasis cues through word choice and sentence structure
-5. Ensure complex ideas have mental "landing pads" before and after
-6. Make the text flow naturally from one thought to the next
-
-Output only the optimized script, preserving length and meaning.`,
-    temperature: 0.6,
-  },
-  {
-    name: 'Stage 5: Final Polish',
-    description: 'Line-by-line refinement for perfection',
-    system: `You are a perfectionist editor making final passes on award-winning content. Every word must earn its place. Every sentence must flow perfectly into the next. You catch what others miss and elevate good to exceptional.`,
-    userTemplate: `Topic: '{topic}'
-
-Research brief for reference:
-{research}
-
-Final critique:
-{critique}
-
-Script for final polish:
-{previousOutput}
-
----
-
-Make final refinements:
-1. Ensure the opening line is absolutely captivating
-2. Check every transition is smooth and logical
-3. Verify the conclusion resonates and lingers
-4. Polish any remaining awkward phrasings
-5. Confirm the overall arc delivers on its promise
-6. Make it something the listener will remember
+FINAL POLISH:
+- Ensure the opening line is absolutely captivating
+- Check every transition is smooth and logical
+- Verify the conclusion resonates and lingers
+- Make it memorable
 
 Output only the final polished script.`,
-    temperature: 0.5,
+    temperature: 0.6,
   },
 ] as const;
 
