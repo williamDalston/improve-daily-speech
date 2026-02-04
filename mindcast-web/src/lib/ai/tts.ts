@@ -125,19 +125,15 @@ function splitForTTS(text: string, maxChars: number): string[] {
 // ElevenLabs TTS (Most Natural)
 // ============================================================================
 
-async function generateWithElevenLabs(
+/**
+ * Generate audio for a single chunk using ElevenLabs
+ */
+async function generateElevenLabsChunk(
   text: string,
-  voice: ElevenLabsVoice = 'rachel',
-  options: { voiceId?: string; stability?: number; similarityBoost?: number } = {}
+  voiceId: string,
+  apiKey: string,
+  options: { stability?: number; similarityBoost?: number } = {}
 ): Promise<Buffer> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
-  if (!apiKey) {
-    throw new Error('ELEVENLABS_API_KEY not configured');
-  }
-
-  // Get voice ID - use custom if provided, otherwise look up
-  const voiceId = options.voiceId || ELEVENLABS_VOICE_IDS[voice] || ELEVENLABS_VOICE_IDS.rachel;
-
   const response = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
     {
@@ -167,6 +163,49 @@ async function generateWithElevenLabs(
 
   const arrayBuffer = await response.arrayBuffer();
   return Buffer.from(arrayBuffer);
+}
+
+async function generateWithElevenLabs(
+  text: string,
+  voice: ElevenLabsVoice = 'rachel',
+  options: { voiceId?: string; stability?: number; similarityBoost?: number } = {}
+): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error('ELEVENLABS_API_KEY not configured');
+  }
+
+  // Get voice ID - use custom if provided, otherwise look up
+  const voiceId = options.voiceId || ELEVENLABS_VOICE_IDS[voice] || ELEVENLABS_VOICE_IDS.rachel;
+
+  // Split into chunks to avoid ElevenLabs timeout on long texts
+  // ElevenLabs recommends ~2500 chars max per request for optimal performance
+  const chunks = splitForTTS(text, 2500);
+
+  // For short texts, no chunking needed
+  if (chunks.length === 1) {
+    return generateElevenLabsChunk(chunks[0], voiceId, apiKey, options);
+  }
+
+  // Process chunks sequentially (to maintain voice consistency)
+  // Could parallelize with Promise.all for speed, but sequential ensures better audio continuity
+  const audioBuffers: Buffer[] = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    console.log(`ElevenLabs TTS: Processing chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+
+    const buffer = await generateElevenLabsChunk(chunk, voiceId, apiKey, options);
+    audioBuffers.push(buffer);
+
+    // Small delay between chunks to avoid rate limiting
+    if (i < chunks.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  // Concatenate all audio buffers
+  return Buffer.concat(audioBuffers);
 }
 
 // ============================================================================

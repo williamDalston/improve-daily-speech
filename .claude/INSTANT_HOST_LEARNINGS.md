@@ -231,6 +231,61 @@ ELEVENLABS_API_KEY=your_key_here
 
 ---
 
+## Issue 8: ElevenLabs TTS Timeout on Long Episodes
+
+### Problem
+Episode generation stuck at 88% (AUDIO step) after 15+ minutes. The job never completes.
+
+**Root Cause**: The ElevenLabs TTS function was sending the **entire transcript** (1500-3000+ words) in a single API call. Long texts cause:
+- ElevenLabs API timeout
+- Vercel function timeout (5 min max)
+- Memory issues with large audio responses
+
+### Solution
+Split the text into chunks (~2500 chars each) and process sequentially:
+
+```typescript
+async function generateWithElevenLabs(text: string, ...): Promise<Buffer> {
+  // Split into chunks to avoid ElevenLabs timeout
+  const chunks = splitForTTS(text, 2500);
+
+  if (chunks.length === 1) {
+    return generateElevenLabsChunk(chunks[0], voiceId, apiKey, options);
+  }
+
+  // Process chunks sequentially for voice consistency
+  const audioBuffers: Buffer[] = [];
+  for (const chunk of chunks) {
+    const buffer = await generateElevenLabsChunk(chunk, voiceId, apiKey, options);
+    audioBuffers.push(buffer);
+    // Small delay between chunks to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  return Buffer.concat(audioBuffers);
+}
+```
+
+### Why Sequential, Not Parallel?
+- **Voice consistency**: Sequential processing maintains natural flow
+- **Rate limiting**: ElevenLabs may throttle parallel requests
+- **Memory**: Parallel would hold all responses in memory at once
+
+### Progress Mapping Reference
+| Status | Progress | Step Index |
+|--------|----------|------------|
+| PENDING | 0% | -1 |
+| RESEARCH | 15% | 0 |
+| DRAFTING | 35% | 1 |
+| JUDGING | 45% | 2 |
+| ENHANCING | 50-80% | 3-6 |
+| AUDIO | 85-92% | 7 |
+| COMPLETE | 100% | 8 |
+
+If stuck at 88%, check the AUDIO step / ElevenLabs API.
+
+---
+
 ## Best Practices Summary
 
 1. **Single TTS Source**: Use only ElevenLabs, no browser fallback
@@ -240,6 +295,7 @@ ELEVENLABS_API_KEY=your_key_here
 5. **Conversation State**: Track history for context-aware responses
 6. **Multiple Input Methods**: Voice + text for accessibility
 7. **Natural Pauses**: Don't have host talk non-stop, wait for responses
+8. **Chunk Long TTS**: Split transcripts into ~2500 char chunks for ElevenLabs
 
 ---
 
