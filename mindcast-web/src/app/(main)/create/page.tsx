@@ -47,13 +47,24 @@ const LENGTHS = [
   { value: '20 min', label: '20 min', words: '~3k', icon: Clock },
 ];
 
-// Rotating tips shown during generation
+// Rotating tips shown during generation - more engaging
 const LOADING_TIPS = [
-  { icon: Brain, text: 'Our AI is researching your topic from multiple angles...' },
-  { icon: BookOpen, text: 'Two AI models are drafting different approaches...' },
-  { icon: Sparkles, text: 'A judge AI is selecting the best narrative...' },
-  { icon: Mic, text: 'Enhancing for natural spoken delivery...' },
-  { icon: Lightbulb, text: 'Adding depth and memorable insights...' },
+  { icon: Brain, text: 'Diving deep into your topic from multiple perspectives...' },
+  { icon: BookOpen, text: 'Gathering the most fascinating angles and insights...' },
+  { icon: Sparkles, text: 'Crafting a narrative that will actually stick with you...' },
+  { icon: Mic, text: 'Optimizing for natural, engaging audio delivery...' },
+  { icon: Lightbulb, text: 'Adding those "aha!" moments that make learning memorable...' },
+  { icon: Zap, text: 'Making complex ideas surprisingly simple...' },
+];
+
+// Fun facts shown while waiting (rotates with tips)
+const WAITING_FACTS = [
+  'Audio learning engages your brain differently than reading - you retain up to 40% more!',
+  'The best time to listen to educational content is during "dead time" - commutes, workouts, chores.',
+  'Spaced repetition with audio helps move knowledge from short-term to long-term memory.',
+  'Your brain processes spoken words 3x faster than written ones.',
+  'Learning something new creates physical changes in your brain within minutes.',
+  'Explaining concepts aloud (even to yourself) dramatically improves retention.',
 ];
 
 // Topic templates - structured prompts that reduce friction
@@ -274,6 +285,7 @@ export default function CreatePage() {
   const [length, setLength] = useState('10 min');
   const [personalContext, setPersonalContext] = useState('');
   const [showPersonalization, setShowPersonalization] = useState(false);
+  const [showCustomization, setShowCustomization] = useState(false); // Hide customization until user wants it
   const [isGenerating, setIsGenerating] = useState(false);
   const [steps, setSteps] = useState<PipelineStep[]>(PIPELINE_STEPS);
   const [error, setError] = useState<string | null>(null);
@@ -289,8 +301,9 @@ export default function CreatePage() {
     transcript: string;
   } | null>(null);
 
-  // Rotating tip index
+  // Rotating tip and fact indices
   const [tipIndex, setTipIndex] = useState(0);
+  const [factIndex, setFactIndex] = useState(0);
 
   // Footprints for AI transparency (Reasoning Traces from UX Blueprint)
   const [footprints, setFootprints] = useState<Footprint[]>([]);
@@ -302,13 +315,28 @@ export default function CreatePage() {
   const [connectionLost, setConnectionLost] = useState(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 
-  // Rotate tips every 4 seconds during generation
+  // Restore topic from localStorage on mount (preserves across login redirect)
+  useEffect(() => {
+    const savedTopic = localStorage.getItem('mindcast_pending_topic');
+    if (savedTopic) {
+      setTopic(savedTopic);
+      localStorage.removeItem('mindcast_pending_topic');
+    }
+  }, []);
+
+  // Rotate tips every 4 seconds and facts every 6 seconds during generation
   useEffect(() => {
     if (!isGenerating) return;
-    const interval = setInterval(() => {
+    const tipInterval = setInterval(() => {
       setTipIndex((prev) => (prev + 1) % LOADING_TIPS.length);
     }, 4000);
-    return () => clearInterval(interval);
+    const factInterval = setInterval(() => {
+      setFactIndex((prev) => (prev + 1) % WAITING_FACTS.length);
+    }, 6000);
+    return () => {
+      clearInterval(tipInterval);
+      clearInterval(factInterval);
+    };
   }, [isGenerating]);
 
   // Mobile stability: Request wake lock to prevent screen sleep during generation
@@ -490,6 +518,8 @@ export default function CreatePage() {
     if (!topic.trim()) return;
 
     if (!session?.user) {
+      // Save topic to localStorage so it persists across login
+      localStorage.setItem('mindcast_pending_topic', topic);
       router.push('/login');
       return;
     }
@@ -730,194 +760,204 @@ export default function CreatePage() {
               )}
             </div>
 
-            {/* Learning Intent Selection - "What do you want to achieve?" */}
-            {!isGenerating && topic && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text-primary">
-                  What's your goal?
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {LEARNING_INTENTS.map((intent) => (
-                    <button
-                      key={intent.id}
-                      onClick={() => setSelectedIntent(
-                        selectedIntent === intent.id ? null : intent.id
-                      )}
-                      className={cn(
-                        'flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all active:scale-95',
-                        'touch-manipulation',
-                        selectedIntent === intent.id
-                          ? 'border-brand bg-brand/10 text-brand'
-                          : 'border-border hover:border-brand/50 text-text-secondary'
-                      )}
-                    >
-                      <span>{intent.emoji}</span>
-                      <span className="font-medium">{intent.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* Customization Toggle - show only after topic entered */}
+            {!isGenerating && topic && !showCustomization && (
+              <button
+                onClick={() => setShowCustomization(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border p-3 text-sm text-text-muted transition-colors hover:border-brand/50 hover:text-text-secondary"
+              >
+                <ChevronDown className="h-4 w-4" />
+                Customize style, level & more (optional)
+              </button>
             )}
 
-            {/* Knowledge Level Selection */}
-            {!isGenerating && topic && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text-primary">
-                  Your level
-                </label>
-                <div className="flex gap-2">
-                  {KNOWLEDGE_LEVELS.map((level) => (
-                    <button
-                      key={level.id}
-                      onClick={() => setSelectedLevel(level.id)}
-                      className={cn(
-                        'flex flex-1 flex-col items-center gap-1 rounded-xl border p-3 text-center transition-all active:scale-95',
-                        'touch-manipulation',
-                        selectedLevel === level.id
-                          ? 'border-brand bg-brand/10'
-                          : 'border-border hover:border-brand/50'
-                      )}
-                    >
-                      <span className={cn(
-                        'text-sm font-medium',
-                        selectedLevel === level.id ? 'text-brand' : 'text-text-primary'
-                      )}>
-                        {level.label}
-                      </span>
-                      <span className="text-xs text-text-muted">{level.description}</span>
-                    </button>
-                  ))}
+            {/* Customization Options - Hidden by default */}
+            {!isGenerating && topic && showCustomization && (
+              <div className="space-y-4 animate-fade-in rounded-xl border border-border bg-surface-secondary p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-text-primary">Customization</span>
+                  <button
+                    onClick={() => setShowCustomization(false)}
+                    className="text-xs text-text-muted hover:text-text-secondary"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
                 </div>
-              </div>
-            )}
 
-            {/* Style Lens Selection */}
-            {!isGenerating && topic && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text-primary">
-                  Perspective & Tone
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {STYLE_LENSES.map((style) => (
-                    <button
-                      key={style.id}
-                      onClick={() => setSelectedStyle(style.id)}
-                      className={cn(
-                        'flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all active:scale-95',
-                        'touch-manipulation',
-                        selectedStyle === style.id
-                          ? 'border-brand bg-brand/10 text-brand'
-                          : 'border-border hover:border-brand/50 text-text-secondary'
-                      )}
-                    >
-                      <span>{style.emoji}</span>
-                      <span className="font-medium">{style.label}</span>
-                    </button>
-                  ))}
-                </div>
-                {selectedStyle !== 'balanced' && (
-                  <p className="text-xs text-text-muted">
-                    {STYLE_LENSES.find(s => s.id === selectedStyle)?.description}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Content Constraints - Optional Enhancements */}
-            {!isGenerating && topic && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text-primary">
-                  Include (optional)
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {CONTENT_CONSTRAINTS.map((constraint) => {
-                    const isSelected = selectedConstraints.includes(constraint.id);
-                    return (
+                {/* Learning Intent Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-muted">
+                    What's your goal?
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {LEARNING_INTENTS.map((intent) => (
                       <button
-                        key={constraint.id}
-                        onClick={() => {
-                          setSelectedConstraints(prev =>
-                            isSelected
-                              ? prev.filter(c => c !== constraint.id)
-                              : [...prev, constraint.id]
-                          );
-                        }}
+                        key={intent.id}
+                        onClick={() => setSelectedIntent(
+                          selectedIntent === intent.id ? null : intent.id
+                        )}
                         className={cn(
-                          'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-all active:scale-95',
+                          'flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all active:scale-95',
                           'touch-manipulation',
-                          isSelected
+                          selectedIntent === intent.id
                             ? 'border-brand bg-brand/10 text-brand'
-                            : 'border-border hover:border-brand/30 text-text-muted hover:text-text-secondary'
+                            : 'border-border hover:border-brand/50 text-text-secondary'
                         )}
                       >
-                        <span>{constraint.emoji}</span>
-                        <span>{constraint.label}</span>
+                        <span>{intent.emoji}</span>
+                        <span className="font-medium">{intent.label}</span>
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
 
-            {/* Make It About Me - Personalization */}
-            {!isGenerating && topic && (
-              <div className="space-y-2">
-                <button
-                  onClick={() => setShowPersonalization(!showPersonalization)}
-                  className="flex w-full items-center justify-between rounded-xl border border-border p-3 transition-colors hover:bg-surface-secondary"
-                >
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-brand" />
-                    <span className="text-sm font-medium text-text-primary">
-                      Make it about me
-                    </span>
-                    {personalContext && (
-                      <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand">
-                        Active
-                      </span>
-                    )}
+                {/* Knowledge Level Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-muted">
+                    Your level
+                  </label>
+                  <div className="flex gap-2">
+                    {KNOWLEDGE_LEVELS.map((level) => (
+                      <button
+                        key={level.id}
+                        onClick={() => setSelectedLevel(level.id)}
+                        className={cn(
+                          'flex flex-1 flex-col items-center gap-1 rounded-xl border p-3 text-center transition-all active:scale-95',
+                          'touch-manipulation',
+                          selectedLevel === level.id
+                            ? 'border-brand bg-brand/10'
+                            : 'border-border hover:border-brand/50'
+                        )}
+                      >
+                        <span className={cn(
+                          'text-sm font-medium',
+                          selectedLevel === level.id ? 'text-brand' : 'text-text-primary'
+                        )}>
+                          {level.label}
+                        </span>
+                        <span className="text-xs text-text-muted">{level.description}</span>
+                      </button>
+                    ))}
                   </div>
-                  {showPersonalization ? (
-                    <ChevronUp className="h-4 w-4 text-text-muted" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-text-muted" />
-                  )}
-                </button>
+                </div>
 
-                {showPersonalization && (
-                  <div className="animate-fade-in space-y-2 rounded-xl border border-border bg-surface-secondary p-4">
-                    <p className="text-xs text-text-muted">
-                      Add personal context to get tailored examples and perspectives
-                    </p>
-                    <Textarea
-                      placeholder="e.g., I'm a high school teacher, I'm learning to invest, I work in healthcare, I'm curious about this for my startup..."
-                      value={personalContext}
-                      onChange={(e) => setPersonalContext(e.target.value)}
-                      className="min-h-[80px] resize-none text-sm"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        'I\'m a student',
-                        'I\'m a teacher',
-                        'I\'m an investor',
-                        'I\'m a parent',
-                        'I\'m a professional',
-                      ].map((suggestion) => (
+                {/* Style Lens Selection */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-muted">
+                    Perspective & Tone
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {STYLE_LENSES.map((style) => (
+                      <button
+                        key={style.id}
+                        onClick={() => setSelectedStyle(style.id)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-all active:scale-95',
+                          'touch-manipulation',
+                          selectedStyle === style.id
+                            ? 'border-brand bg-brand/10 text-brand'
+                            : 'border-border hover:border-brand/50 text-text-secondary'
+                        )}
+                      >
+                        <span>{style.emoji}</span>
+                        <span className="font-medium">{style.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Content Constraints */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-text-muted">
+                    Include (optional)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {CONTENT_CONSTRAINTS.map((constraint) => {
+                      const isSelected = selectedConstraints.includes(constraint.id);
+                      return (
                         <button
-                          key={suggestion}
-                          onClick={() => setPersonalContext(
-                            personalContext
-                              ? `${personalContext}, ${suggestion.toLowerCase()}`
-                              : suggestion
+                          key={constraint.id}
+                          onClick={() => {
+                            setSelectedConstraints(prev =>
+                              isSelected
+                                ? prev.filter(c => c !== constraint.id)
+                                : [...prev, constraint.id]
+                            );
+                          }}
+                          className={cn(
+                            'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-all active:scale-95',
+                            'touch-manipulation',
+                            isSelected
+                              ? 'border-brand bg-brand/10 text-brand'
+                              : 'border-border hover:border-brand/30 text-text-muted hover:text-text-secondary'
                           )}
-                          className="rounded-full bg-surface px-2 py-1 text-xs text-text-muted transition-colors hover:bg-border hover:text-text-primary"
                         >
-                          + {suggestion}
+                          <span>{constraint.emoji}</span>
+                          <span>{constraint.label}</span>
                         </button>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
+
+                {/* Make It About Me - Personalization */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setShowPersonalization(!showPersonalization)}
+                    className="flex w-full items-center justify-between rounded-xl border border-border bg-surface p-3 transition-colors hover:bg-surface-tertiary"
+                  >
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4 text-brand" />
+                      <span className="text-sm font-medium text-text-primary">
+                        Make it about me
+                      </span>
+                      {personalContext && (
+                        <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs text-brand">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    {showPersonalization ? (
+                      <ChevronUp className="h-4 w-4 text-text-muted" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-text-muted" />
+                    )}
+                  </button>
+
+                  {showPersonalization && (
+                    <div className="animate-fade-in space-y-2 rounded-xl border border-border bg-surface p-4">
+                      <p className="text-xs text-text-muted">
+                        Add personal context to get tailored examples and perspectives
+                      </p>
+                      <Textarea
+                        placeholder="e.g., I'm a high school teacher, I'm learning to invest, I work in healthcare..."
+                        value={personalContext}
+                        onChange={(e) => setPersonalContext(e.target.value)}
+                        className="min-h-[80px] resize-none text-sm"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          'I\'m a student',
+                          'I\'m a teacher',
+                          'I\'m an investor',
+                          'I\'m a parent',
+                        ].map((suggestion) => (
+                          <button
+                            key={suggestion}
+                            onClick={() => setPersonalContext(
+                              personalContext
+                                ? `${personalContext}, ${suggestion.toLowerCase()}`
+                                : suggestion
+                            )}
+                            className="rounded-full bg-surface-tertiary px-2 py-1 text-xs text-text-muted transition-colors hover:bg-border hover:text-text-primary"
+                          >
+                            + {suggestion}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -980,7 +1020,7 @@ export default function CreatePage() {
                       "{quickHook.hook}"
                     </p>
                     <p className="text-sm text-text-secondary">{quickHook.preview}</p>
-                    <div className="flex items-start gap-2 rounded-lg bg-white/80 p-3">
+                    <div className="flex items-start gap-2 rounded-lg bg-white/80 p-3 dark:bg-surface">
                       <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                       <p className="text-sm text-text-secondary">
                         <span className="font-medium text-text-primary">Fun fact: </span>
@@ -989,15 +1029,29 @@ export default function CreatePage() {
                     </div>
                   </div>
                 ) : (
-                  /* Initial loading state before hook arrives */
-                  <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface-secondary p-6">
-                    <div className="relative">
-                      <div className="h-12 w-12 rounded-full bg-brand/10" />
-                      <Loader2 className="absolute inset-0 m-auto h-6 w-6 animate-spin text-brand" />
+                  /* Initial loading state before hook arrives - more engaging */
+                  <div className="space-y-4 rounded-xl border border-brand/20 bg-gradient-to-br from-brand/5 to-brand/10 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <div className="h-12 w-12 rounded-full bg-brand/20" />
+                        <Loader2 className="absolute inset-0 m-auto h-6 w-6 animate-spin text-brand" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-text-primary">Creating your episode...</p>
+                        <p className="text-sm text-text-secondary">About "{topic.slice(0, 40)}{topic.length > 40 ? '...' : ''}"</p>
+                      </div>
                     </div>
-                    <p className="text-center text-sm text-text-secondary">
-                      Preparing something special for you...
-                    </p>
+                    {/* Rotating fact while waiting */}
+                    <div
+                      key={factIndex}
+                      className="animate-fade-in flex items-start gap-2 rounded-lg bg-white/80 p-3 dark:bg-surface"
+                    >
+                      <Brain className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+                      <p className="text-sm text-text-secondary">
+                        <span className="font-medium text-text-primary">Did you know? </span>
+                        {WAITING_FACTS[factIndex]}
+                      </p>
+                    </div>
                   </div>
                 )}
 
