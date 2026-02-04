@@ -1,6 +1,6 @@
 /**
  * Unified Text-to-Speech
- * Supports Google Cloud TTS (fast) and OpenAI TTS (premium quality)
+ * Supports ElevenLabs (most natural), OpenAI TTS (premium), and Google Cloud TTS (fast)
  */
 
 import OpenAI from 'openai';
@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 // Types
 // ============================================================================
 
-export type TTSProvider = 'google' | 'openai';
+export type TTSProvider = 'elevenlabs' | 'google' | 'openai';
 
 export type GoogleVoice =
   | 'en-US-Neural2-D'  // Male, natural
@@ -24,10 +24,49 @@ export type OpenAIVoice =
   | 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo'
   | 'fable' | 'onyx' | 'nova' | 'sage' | 'shimmer';
 
+// ElevenLabs voice IDs - these are the most natural-sounding voices
+export type ElevenLabsVoice =
+  | 'rachel'    // Warm, engaging female - great for conversational
+  | 'drew'      // Confident male - great for educational content
+  | 'clyde'     // War veteran character - deep, authoritative
+  | 'paul'      // Ground reporter - natural, conversational
+  | 'domi'      // Strong female - energetic
+  | 'dave'      // British male - conversational
+  | 'fin'       // Irish male - friendly
+  | 'sarah'     // Soft female - gentle, soothing
+  | 'antoni'    // Male - well-rounded
+  | 'thomas'    // American male - calm
+  | 'charlie'   // Australian male - casual
+  | 'emily'     // American female - calm
+  | 'elli'      // American female - emotional range
+  | 'callum'    // Transatlantic male - intense
+  | 'custom';   // Use custom voice ID
+
+// ElevenLabs voice ID mapping
+const ELEVENLABS_VOICE_IDS: Record<string, string> = {
+  rachel: '21m00Tcm4TlvDq8ikWAM',
+  drew: '29vD33N1CtxCmqQRPOHJ',
+  clyde: '2EiwWnXFnvU5JabPnv8n',
+  paul: '5Q0t7uMcjvnagumLfvZi',
+  domi: 'AZnzlk1XvdvUeBnXmlld',
+  dave: 'CYw3kZ02Hs0563khs1Fj',
+  fin: 'D38z5RcWu1voky8WS1ja',
+  sarah: 'EXAVITQu4vr4xnSDxMaL',
+  antoni: 'ErXwobaYiN019PkySvjV',
+  thomas: 'GBv7mTt0atIp3Br8iCZE',
+  charlie: 'IKne3meq5aSn9XLyUdCD',
+  emily: 'LcfcDJNUP1GQjkzn1xUU',
+  elli: 'MF3mGyEYCl7XYWbV9V6O',
+  callum: 'N2lVS1w4EtoT3dr4eOWO',
+};
+
 export interface GenerateAudioOptions {
   provider?: TTSProvider;
-  voice?: GoogleVoice | OpenAIVoice;
+  voice?: GoogleVoice | OpenAIVoice | ElevenLabsVoice;
+  voiceId?: string; // Custom ElevenLabs voice ID
   speed?: number; // 0.25 to 4.0
+  stability?: number; // ElevenLabs: 0-1, higher = more stable
+  similarityBoost?: number; // ElevenLabs: 0-1, higher = more similar to original
 }
 
 // ============================================================================
@@ -80,6 +119,54 @@ function splitForTTS(text: string, maxChars: number): string[] {
 
   if (current.trim()) chunks.push(current.trim());
   return chunks;
+}
+
+// ============================================================================
+// ElevenLabs TTS (Most Natural)
+// ============================================================================
+
+async function generateWithElevenLabs(
+  text: string,
+  voice: ElevenLabsVoice = 'rachel',
+  options: { voiceId?: string; stability?: number; similarityBoost?: number } = {}
+): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error('ELEVENLABS_API_KEY not configured');
+  }
+
+  // Get voice ID - use custom if provided, otherwise look up
+  const voiceId = options.voiceId || ELEVENLABS_VOICE_IDS[voice] || ELEVENLABS_VOICE_IDS.rachel;
+
+  const response = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    {
+      method: 'POST',
+      headers: {
+        'Accept': 'audio/mpeg',
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2_5', // Fast, high-quality model
+        voice_settings: {
+          stability: options.stability ?? 0.5,
+          similarity_boost: options.similarityBoost ?? 0.75,
+          style: 0.5, // Expressiveness
+          use_speaker_boost: true,
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`ElevenLabs TTS error: ${error}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
 
 // ============================================================================
@@ -168,22 +255,35 @@ async function generateWithOpenAI(
 
 /**
  * Generate audio from text
- * Uses Google by default (faster), falls back to OpenAI
+ * Priority: ElevenLabs (most natural) > OpenAI (premium) > Google (fast)
  */
 export async function generateAudio(
   text: string,
   options: GenerateAudioOptions = {}
 ): Promise<Buffer> {
-  const { provider = 'google', voice, speed = 1.0 } = options;
+  const { provider, voice, voiceId, speed = 1.0, stability, similarityBoost } = options;
 
-  // Try Google first if configured
-  if (provider === 'google' && process.env.GOOGLE_TTS_API_KEY) {
-    return generateWithGoogle(text, (voice as GoogleVoice) || 'en-US-Neural2-D', speed);
+  // ElevenLabs - most natural voices
+  if (provider === 'elevenlabs' || (!provider && process.env.ELEVENLABS_API_KEY)) {
+    if (process.env.ELEVENLABS_API_KEY) {
+      return generateWithElevenLabs(
+        text,
+        (voice as ElevenLabsVoice) || 'rachel',
+        { voiceId, stability, similarityBoost }
+      );
+    }
   }
 
-  // Fall back to OpenAI
-  if (process.env.OPENAI_API_KEY) {
-    return generateWithOpenAI(text, (voice as OpenAIVoice) || 'onyx', speed);
+  // OpenAI - premium quality
+  if (provider === 'openai' || (!provider && process.env.OPENAI_API_KEY)) {
+    if (process.env.OPENAI_API_KEY) {
+      return generateWithOpenAI(text, (voice as OpenAIVoice) || 'nova', speed);
+    }
+  }
+
+  // Google - fast
+  if (provider === 'google' && process.env.GOOGLE_TTS_API_KEY) {
+    return generateWithGoogle(text, (voice as GoogleVoice) || 'en-US-Neural2-D', speed);
   }
 
   throw new Error('No TTS provider configured');
