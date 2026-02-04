@@ -1,6 +1,0 @@
-{
-  "buildCommand": "cd mindcast-web && npm run build",
-  "outputDirectory": "mindcast-web/.next",
-  "installCommand": "cd mindcast-web && npm install",
-  "framework": "nextjs"
-}

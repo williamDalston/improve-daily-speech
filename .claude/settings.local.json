@@ -17,7 +17,14 @@
       "Bash(npm run db:push:*)",
       "Bash(npm install)",
       "Bash(npm run db:generate:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(npm run build:*)",
+      "Bash(explorer.exe \"c:\\\\Users\\\\farad\\\\OneDrive\\\\Desktop\\\\Speech\\\\mindcast-web\\\\public\\\\audio\\\\ambient\")",
+      "Bash(start \"\" \"c:\\\\Users\\\\farad\\\\OneDrive\\\\Desktop\\\\Speech\\\\mindcast-web\\\\public\\\\audio\\\\ambient\")",
+      "Bash(ls:*)",
+      "Bash(npm install:*)",
+      "Bash(node -e:*)",
+      "Bash(npx vercel:*)"
     ]
   }
 }
