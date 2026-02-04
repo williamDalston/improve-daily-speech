@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { createCheckoutSession } from '@/lib/stripe';
+import { createCheckoutSession, type BillingInterval } from '@/lib/stripe';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const session = await auth();
 
   if (!session?.user?.id || !session?.user?.email) {
@@ -10,9 +10,14 @@ export async function POST() {
   }
 
   try {
+    // Get billing interval from request body
+    const body = await request.json().catch(() => ({}));
+    const interval: BillingInterval = body.interval === 'year' ? 'year' : 'month';
+
     const checkoutUrl = await createCheckoutSession(
       session.user.id,
-      session.user.email
+      session.user.email,
+      interval
     );
     return NextResponse.json({ url: checkoutUrl });
   } catch (error) {

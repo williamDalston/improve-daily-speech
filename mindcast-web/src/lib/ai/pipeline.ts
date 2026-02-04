@@ -111,9 +111,10 @@ export async function runDraft(
   topic: string,
   research: string,
   length: EpisodeLength,
-  provider: Provider = 'anthropic'
+  provider: Provider = 'anthropic',
+  style?: string
 ): Promise<string> {
-  const prompt = getDraftPrompt(topic, research, length);
+  const prompt = getDraftPrompt(topic, research, length, style);
   return callLLM({
     provider,
     system: prompt.system,
@@ -125,11 +126,12 @@ export async function runDraft(
 export async function runParallelDrafts(
   topic: string,
   research: string,
-  length: EpisodeLength
+  length: EpisodeLength,
+  style?: string
 ): Promise<{ label: string; text: string }[]> {
   const [anthropicDraft, openaiDraft] = await Promise.all([
-    runDraft(topic, research, length, 'anthropic'),
-    runDraft(topic, research, length, 'openai'),
+    runDraft(topic, research, length, 'anthropic', style),
+    runDraft(topic, research, length, 'openai', style),
   ]);
 
   return [
@@ -219,26 +221,27 @@ export async function runEnhancementStage(
 // ============================================================================
 
 export type PipelineStep =
-  | { type: 'research'; status: 'running' | 'done'; text?: string }
-  | { type: 'drafts'; status: 'running' | 'done'; drafts?: { label: string; text: string }[] }
+  | { type: 'research'; status: 'running' | 'done'; research?: string }
+  | { type: 'drafts'; status: 'running' | 'done'; drafts?: { label: string; text: string }[]; draftA?: string; draftB?: string }
   | { type: 'judge'; status: 'running' | 'done'; winner?: string; judgment?: string }
   | { type: 'critique'; status: 'running' | 'done'; stageName: string; text?: string }
-  | { type: 'enhancement'; status: 'running' | 'done'; stageName: string; stageIndex: number; text?: string }
+  | { type: 'enhancement'; status: 'running' | 'done'; stageName: string; stageIndex: number; text?: string; enhancedText?: string }
   | { type: 'done'; finalText: string };
 
 export async function* runFullPipeline(
   topic: string,
-  length: EpisodeLength = '10 min'
+  length: EpisodeLength = '10 min',
+  style?: string
 ): AsyncGenerator<PipelineStep> {
   // Stage 0: Research
   yield { type: 'research', status: 'running' };
   const research = await runResearch(topic, length);
-  yield { type: 'research', status: 'done', text: research };
+  yield { type: 'research', status: 'done', research };
 
-  // Stage 1: Parallel Drafts
+  // Stage 1: Parallel Drafts (with style applied)
   yield { type: 'drafts', status: 'running' };
-  const drafts = await runParallelDrafts(topic, research, length);
-  yield { type: 'drafts', status: 'done', drafts };
+  const drafts = await runParallelDrafts(topic, research, length, style);
+  yield { type: 'drafts', status: 'done', drafts, draftA: drafts[0].text, draftB: drafts[1].text };
 
   // Judge
   yield { type: 'judge', status: 'running' };
@@ -271,6 +274,7 @@ export async function* runFullPipeline(
       stageName: stage.name,
       stageIndex: i,
       text: currentText,
+      enhancedText: currentText,
     };
   }
 

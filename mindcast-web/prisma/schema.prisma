@@ -8,7 +8,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // For migrations
+  // directUrl = env("DIRECT_URL") // For migrations (uncomment for Vercel/Neon)
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -77,11 +77,28 @@ model User {
   // Usage tracking
   freeEpisodesUsed Int @default(0) @map("free_episodes_used")
 
+  // Onboarding
+  onboardingCompleted Boolean @default(false) @map("onboarding_completed")
+
+  // Streak tracking (habit formation)
+  currentStreak    Int       @default(0) @map("current_streak")
+  longestStreak    Int       @default(0) @map("longest_streak")
+  lastActivityDate DateTime? @map("last_activity_date")
+  totalXp          Int       @default(0) @map("total_xp") // Gamification points
+
+  // Preferences (for Daily Drop + personalization)
+  interests       Json?     // Array of interest categories
+  listeningMode   String?   @map("listening_mode") // "commute" or "deep_dive"
+  narratorTone    String?   @map("narrator_tone") // "bbc_calm", "playful_professor", "no_fluff"
+  lastDailyDrop   DateTime? @map("last_daily_drop") // When last Daily Drop was generated
+
   // Relations
-  accounts Account[]
-  sessions Session[]
-  episodes Episode[]
-  reflects Reflect[]
+  accounts  Account[]
+  sessions  Session[]
+  episodes  Episode[]
+  reflects  Reflect[]
+  jobs      Job[]
+  playlists Playlist[]
 
   @@map("users")
 }
@@ -113,10 +130,13 @@ model Episode {
   // Metadata
   status    EpisodeStatus @default(DRAFT)
   wordCount Int?          @map("word_count")
+  sources   Json?         // Array of source citations
 
   // Relations
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reflects Reflect[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reflects         Reflect[]
+  job              Job?
+  playlistEpisodes PlaylistEpisode[]
 
   @@index([userId, createdAt])
   @@map("episodes")
@@ -127,6 +147,65 @@ enum EpisodeStatus {
   PROCESSING
   READY
   ERROR
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// JOB MODEL (Background generation - survives disconnects)
+// ══════════════════════════════════════════════════════════════════════════════
+
+model Job {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  episodeId String?  @unique @map("episode_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Job configuration
+  topic  String
+  length String @default("10 min")
+  style  String? // Style lens prompt (academic, conversational, skeptical, enthusiastic)
+
+  // Status tracking
+  status       JobStatus @default(PENDING)
+  currentStep  String?   @map("current_step")
+  progress     Int       @default(0) // 0-100
+  footprints   Json?     // Array of { timestamp, action, detail } for AI transparency
+  error        String?   @db.Text
+
+  // Timing
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  // Intermediate results (survive crashes/disconnects)
+  quickHook    Json?     @map("quick_hook") // { hook, preview, funFact }
+  research     String?   @db.Text
+  sources      Json?     // Array of parsed source citations
+  draftA       String?   @map("draft_a") @db.Text
+  draftB       String?   @map("draft_b") @db.Text
+  selectedDraft String?  @map("selected_draft") @db.Text
+  enhanced     String?   @db.Text
+  finalScript  String?   @map("final_script") @db.Text
+  previewAudio String?   @map("preview_audio") @db.Text // base64
+  fullAudio    String?   @map("full_audio") @db.Text // base64
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("jobs")
+}
+
+enum JobStatus {
+  PENDING
+  RESEARCH
+  DRAFTING
+  JUDGING
+  ENHANCING
+  AUDIO
+  COMPLETE
+  FAILED
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -151,4 +230,49 @@ model Reflect {
   @@index([userId, createdAt])
   @@index([episodeId])
   @@map("reflects")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PLAYLIST MODEL (Curated collections)
+// ══════════════════════════════════════════════════════════════════════════════
+
+model Playlist {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Content
+  name        String
+  description String?
+  coverEmoji  String? @default("📚") @map("cover_emoji")
+  isPublic    Boolean @default(false) @map("is_public")
+
+  // Listening progress
+  lastPlayedAt    DateTime? @map("last_played_at")
+  lastEpisodeId   String?   @map("last_episode_id")
+  lastPositionSec Int?      @map("last_position_sec")
+
+  // Relations
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodes PlaylistEpisode[]
+
+  @@index([userId, createdAt])
+  @@map("playlists")
+}
+
+model PlaylistEpisode {
+  id         String   @id @default(cuid())
+  playlistId String   @map("playlist_id")
+  episodeId  String   @map("episode_id")
+  position   Int      @default(0) // Order in playlist
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  episode  Episode  @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, episodeId])
+  @@index([playlistId, position])
+  @@map("playlist_episodes")
 }

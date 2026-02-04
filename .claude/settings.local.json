@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(streamlit run:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(git init:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(tasklist:*)",
+      "Bash(npm run lint)",
+      "Bash(npx next lint:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npm run db:push:*)",
+      "Bash(npm install)",
+      "Bash(npm run db:generate:*)",
+      "Bash(npm ls:*)"
+    ]
+  }
+}

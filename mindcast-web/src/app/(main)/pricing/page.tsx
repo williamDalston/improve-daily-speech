@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+type BillingInterval = 'month' | 'year';
+
 const FEATURES = {
   free: [
     '3 episodes total',
@@ -23,13 +25,31 @@ const FEATURES = {
     'Priority audio generation',
     'All export formats',
     'Learning add-ons (quiz, journal, takeaways)',
+    'RSS podcast feed',
+    'Sources & citations',
   ],
+};
+
+const PRICING = {
+  month: {
+    price: 19.99,
+    label: '/month',
+    equivalent: null,
+    savings: null,
+  },
+  year: {
+    price: 149.99,
+    label: '/year',
+    equivalent: 12.50,
+    savings: 90,
+  },
 };
 
 export default function PricingPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>('month');
 
   const handleUpgrade = async () => {
     if (!session?.user) {
@@ -42,6 +62,8 @@ export default function PricingPage() {
     try {
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interval: billingInterval }),
       });
 
       if (!response.ok) {
@@ -78,6 +100,8 @@ export default function PricingPage() {
 
   const isPro = session?.user?.isPro;
 
+  const currentPricing = PRICING[billingInterval];
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <div className="text-center">
@@ -88,6 +112,39 @@ export default function PricingPage() {
           Unlock unlimited documentary-style learning
         </p>
       </div>
+
+      {/* Billing Interval Toggle */}
+      {!isPro && (
+        <div className="flex justify-center">
+          <div className="inline-flex items-center rounded-full bg-surface-secondary p-1">
+            <button
+              onClick={() => setBillingInterval('month')}
+              className={cn(
+                'rounded-full px-4 py-2 text-body-sm font-medium transition-colors',
+                billingInterval === 'month'
+                  ? 'bg-surface-primary text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              )}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBillingInterval('year')}
+              className={cn(
+                'relative rounded-full px-4 py-2 text-body-sm font-medium transition-colors',
+                billingInterval === 'year'
+                  ? 'bg-surface-primary text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
+              )}
+            >
+              Annual
+              <span className="absolute -right-2 -top-2 rounded-full bg-success px-2 py-0.5 text-caption font-medium text-white">
+                Save $90
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Free Plan */}
@@ -137,9 +194,19 @@ export default function PricingPage() {
             <CardDescription>Unlimited learning power</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="text-display-md text-text-primary">
-              $19.99
-              <span className="text-body-md text-text-muted">/month</span>
+            <div>
+              <div className="text-display-md text-text-primary">
+                ${currentPricing.price}
+                <span className="text-body-md text-text-muted">{currentPricing.label}</span>
+              </div>
+              {currentPricing.equivalent && (
+                <p className="mt-1 text-body-sm text-text-secondary">
+                  Just ${currentPricing.equivalent}/month
+                  <span className="ml-2 text-success font-medium">
+                    (Save ${currentPricing.savings}/year)
+                  </span>
+                </p>
+              )}
             </div>
             <ul className="space-y-3">
               {FEATURES.pro.map((feature) => (

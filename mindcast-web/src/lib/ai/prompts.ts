@@ -16,7 +16,7 @@ export function getResearchPrompt(topic: string, length: EpisodeLength) {
   const config = EPISODE_LENGTHS[length];
 
   return {
-    system: `You are a meticulous research assistant with expertise across all academic disciplines. You produce structured research briefs that give a writer everything they need to create authoritative, specific, and deeply grounded documentary content.`,
+    system: `You are a meticulous research assistant with expertise across all academic disciplines. You produce structured research briefs that give a writer everything they need to create authoritative, specific, and deeply grounded documentary content. You always cite your sources.`,
     user: `I need to write a ${config.minutes}-minute documentary-style audio episode on the topic: '${topic}'
 
 Please produce a comprehensive research brief covering:
@@ -41,16 +41,28 @@ Please produce a comprehensive research brief covering:
 
 10. **Common Misconceptions**: What does the public get wrong about this topic?
 
+11. **SOURCES**: At the end, provide a numbered list of sources referenced in this brief. For each source include:
+    - Title of the work/paper/book
+    - Author(s)
+    - Year of publication
+    - Type (book, journal article, report, study, etc.)
+
+    Format sources as:
+    [1] "Title" by Author(s) (Year) - Type
+
 Be specific. Use names, dates, numbers. No vague generalities. Format as organized bullet points under each heading.`,
     temperature: 0.4,
   };
 }
 
-export function getDraftPrompt(topic: string, research: string, length: EpisodeLength) {
+export function getDraftPrompt(topic: string, research: string, length: EpisodeLength, style?: string) {
   const config = EPISODE_LENGTHS[length];
 
+  // Build style instruction if provided
+  const styleInstruction = style ? `\n\nIMPORTANT STYLE DIRECTION: ${style}` : '';
+
   return {
-    system: `You are a world-class documentary scriptwriter for audio content. Your goal is to make advanced knowledge accessible, memorable, and intellectually stimulating. Write like the narrator of the best BBC or PBS documentaries - authoritative yet warm, making complex ideas feel fascinating and approachable. Your scripts make knowledge stick.`,
+    system: `You are a world-class documentary scriptwriter for audio content. Your goal is to make advanced knowledge accessible, memorable, and intellectually stimulating. Write like the narrator of the best BBC or PBS documentaries - authoritative yet warm, making complex ideas feel fascinating and approachable. Your scripts make knowledge stick.${styleInstruction}`,
     user: `Topic: '${topic}'
 
 Research brief to draw from (use specific details from this):

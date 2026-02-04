@@ -9,6 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { formatDuration, formatDate } from '@/lib/utils';
 import { EpisodeAudioPlayer } from './audio-player';
 import { AddonSection } from './addon-section';
+import { SourcesSection } from './sources-section';
+import { ShareSection } from './share-section';
+import { ContentFeedback } from '@/components/content-feedback';
+import { AddToPlaylistButton } from '@/components/add-to-playlist';
+import type { Source } from '@/lib/ai/sources';
 
 interface EpisodePageProps {
   params: { id: string };
@@ -42,7 +47,7 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
           </Button>
         </Link>
         <div className="flex-1">
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge
               variant={
                 episode.status === 'READY'
@@ -67,11 +72,30 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
             {episode.title || episode.topic}
           </h1>
         </div>
+        {/* Action buttons */}
+        {episode.status === 'READY' && (
+          <div className="flex items-center gap-2">
+            <AddToPlaylistButton
+              episodeId={episode.id}
+              episodeTitle={episode.title || episode.topic}
+            />
+            {episode.transcript && (
+              <ShareSection
+                episodeId={episode.id}
+                episodeTitle={episode.title || episode.topic}
+                transcript={episode.transcript}
+              />
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Audio Player */}
+      {/* Audio Player with Learning Loop */}
       {episode.status === 'READY' && (
-        <EpisodeAudioPlayer episodeId={episode.id} />
+        <EpisodeAudioPlayer
+          episodeId={episode.id}
+          episodeTitle={episode.title || episode.topic}
+        />
       )}
 
       {/* Transcript */}
@@ -93,6 +117,11 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Sources */}
+      {episode.sources && Array.isArray(episode.sources) && episode.sources.length > 0 && (
+        <SourcesSection sources={episode.sources as Source[]} />
       )}
 
       {/* Learning Add-ons */}
@@ -122,6 +151,13 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
               icon={<FileText className="h-5 w-5" />}
             />
           </div>
+        </div>
+      )}
+
+      {/* Content Feedback - Trust Primitive */}
+      {episode.status === 'READY' && (
+        <div className="flex justify-center pt-4 border-t border-border">
+          <ContentFeedback episodeId={episode.id} />
         </div>
       )}
     </div>

@@ -7,10 +7,11 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 export const PLANS = {
-  PRO: {
+  PRO_MONTHLY: {
     priceId: process.env.STRIPE_PRICE_ID!,
     name: 'MindCast Pro',
     price: 19.99,
+    interval: 'month',
     features: [
       'Unlimited episodes',
       'Full AI pipeline (4 enhancement stages)',
@@ -19,7 +20,25 @@ export const PLANS = {
       'Export to all formats',
     ],
   },
+  PRO_ANNUAL: {
+    priceId: process.env.STRIPE_ANNUAL_PRICE_ID || process.env.STRIPE_PRICE_ID!, // Fallback to monthly if not set
+    name: 'MindCast Pro (Annual)',
+    price: 149.99,
+    monthlyEquivalent: 12.50,
+    savings: 90,
+    interval: 'year',
+    features: [
+      'Unlimited episodes',
+      'Full AI pipeline (4 enhancement stages)',
+      'Sovereign Mind reflection lens',
+      'Priority audio generation',
+      'Export to all formats',
+      '2 months free compared to monthly',
+    ],
+  },
 } as const;
+
+export type BillingInterval = 'month' | 'year';
 
 export const FREE_EPISODE_LIMIT = 3;
 
@@ -86,7 +105,8 @@ export async function incrementFreeUsage(userId: string): Promise<void> {
  */
 export async function createCheckoutSession(
   userId: string,
-  userEmail: string
+  userEmail: string,
+  interval: BillingInterval = 'month'
 ): Promise<string> {
   // Get or create Stripe customer
   let user = await db.user.findUnique({
@@ -109,6 +129,9 @@ export async function createCheckoutSession(
     });
   }
 
+  // Select the appropriate plan based on interval
+  const plan = interval === 'year' ? PLANS.PRO_ANNUAL : PLANS.PRO_MONTHLY;
+
   // Create checkout session
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
@@ -116,13 +139,13 @@ export async function createCheckoutSession(
     payment_method_types: ['card'],
     line_items: [
       {
-        price: PLANS.PRO.priceId,
+        price: plan.priceId,
         quantity: 1,
       },
     ],
     success_url: `${process.env.NEXTAUTH_URL}/library?upgraded=true`,
     cancel_url: `${process.env.NEXTAUTH_URL}/pricing`,
-    metadata: { userId },
+    metadata: { userId, interval },
   });
 
   return session.url!;
