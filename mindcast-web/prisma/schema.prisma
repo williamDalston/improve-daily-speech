@@ -216,17 +216,17 @@ enum JobStatus {
 model Reflect {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  episodeId String   @map("episode_id")
+  episodeId String?  @map("episode_id") // Optional - can reflect on episodes or standalone situations
   createdAt DateTime @default(now()) @map("created_at")
 
   // Analysis content
-  question String  @db.Text
-  analysis String  @db.Text
-  lens     String  // stoic, socratic, systems, creative, shadow
+  situation String  @db.Text // The situation/question being analyzed
+  analysis  String  @db.Text // The AI-generated analysis
+  lenses    String  // Comma-separated lenses used (stoic, socratic, systems, creative, shadow)
 
   // Relations
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episode Episode? @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([episodeId])

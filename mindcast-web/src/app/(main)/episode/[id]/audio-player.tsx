@@ -11,7 +11,7 @@ interface EpisodeAudioPlayerProps {
 }
 
 export function EpisodeAudioPlayer({ episodeId, episodeTitle }: EpisodeAudioPlayerProps) {
-  const audioUrl = `/api/audio/${episodeId}`;
+  const audioUrl = `/api/episodes/${episodeId}/audio`;
   const [showLearningLoop, setShowLearningLoop] = useState(false);
   const [learningLoopDismissed, setLearningLoopDismissed] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);

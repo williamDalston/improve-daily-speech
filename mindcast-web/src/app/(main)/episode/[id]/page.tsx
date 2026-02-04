@@ -1,16 +1,16 @@
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { notFound, redirect } from 'next/navigation';
-import { ArrowLeft, Download, BookOpen, FileText, ListChecks } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, ListChecks } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDuration, formatDate } from '@/lib/utils';
 import { EpisodeAudioPlayer } from './audio-player';
 import { AddonSection } from './addon-section';
 import { SourcesSection } from './sources-section';
 import { ShareSection } from './share-section';
+import { TranscriptSection } from './transcript-section';
 import { ContentFeedback } from '@/components/content-feedback';
 import { AddToPlaylistButton } from '@/components/add-to-playlist';
 import type { Source } from '@/lib/ai/sources';
@@ -102,23 +102,10 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
 
       {/* Transcript */}
       {episode.transcript && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Transcript
-            </CardTitle>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="prose prose-sm max-h-[500px] overflow-y-auto whitespace-pre-wrap text-text-secondary">
-              {episode.transcript}
-            </div>
-          </CardContent>
-        </Card>
+        <TranscriptSection
+          transcript={episode.transcript}
+          episodeTitle={episode.title || episode.topic}
+        />
       )}
 
       {/* Sources */}

@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Brain, Lightbulb, Eye, Compass, Sparkles, Loader2 } from 'lucide-react';
+import { Brain, Lightbulb, Eye, Compass, Sparkles, Loader2, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { trackEvent, Events } from '@/lib/analytics';
 
 const LENSES = [
   {
@@ -47,6 +48,14 @@ const LENSES = [
   },
 ];
 
+interface ReflectHistory {
+  id: string;
+  situation: string;
+  analysis: string;
+  lenses: string[];
+  createdAt: string;
+}
+
 export default function ReflectPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -56,6 +65,35 @@ export default function ReflectPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentReflectId, setCurrentReflectId] = useState<string | null>(null);
+
+  // History state
+  const [history, setHistory] = useState<ReflectHistory[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+
+  // Load history on mount
+  useEffect(() => {
+    if (session?.user) {
+      loadHistory();
+    }
+  }, [session?.user]);
+
+  const loadHistory = async () => {
+    setIsLoadingHistory(true);
+    try {
+      const response = await fetch('/api/reflect?limit=10');
+      if (response.ok) {
+        const data = await response.json();
+        setHistory(data.reflects);
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   const toggleLens = (id: string) => {
     setSelectedLenses((prev) =>
@@ -74,6 +112,7 @@ export default function ReflectPage() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysis(null);
+    setCurrentReflectId(null);
 
     try {
       const response = await fetch('/api/reflect', {
@@ -88,11 +127,38 @@ export default function ReflectPage() {
 
       const data = await response.json();
       setAnalysis(data.analysis);
+      setCurrentReflectId(data.id);
+
+      // Track analytics
+      trackEvent({
+        name: Events.REFLECT_SUBMITTED,
+        properties: {
+          lenses: selectedLenses.join(','),
+          situationLength: situation.length,
+        },
+      });
+
+      // Refresh history
+      loadHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
+    });
+  };
+
+  const truncate = (text: string, length: number) => {
+    if (text.length <= length) return text;
+    return text.slice(0, length) + '...';
   };
 
   if (status === 'loading') {
@@ -209,11 +275,81 @@ export default function ReflectPage() {
               setAnalysis(null);
               setSituation('');
               setSelectedLenses([]);
+              setCurrentReflectId(null);
             }}
             className="w-full"
           >
             Start New Reflection
           </Button>
+        </div>
+      )}
+
+      {/* Past Reflections */}
+      {history.length > 0 && (
+        <div className="border-t border-border pt-6">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="w-full flex items-center justify-between px-2 py-2 rounded-lg hover:bg-surface-secondary transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-text-muted" />
+              <span className="text-body-sm font-medium text-text-primary">
+                Past Reflections ({history.length})
+              </span>
+            </div>
+            {showHistory ? (
+              <ChevronUp className="h-4 w-4 text-text-muted" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-text-muted" />
+            )}
+          </button>
+
+          {showHistory && (
+            <div className="mt-4 space-y-3">
+              {isLoadingHistory ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-brand" />
+                </div>
+              ) : (
+                history.map((item) => {
+                  const isExpanded = expandedHistoryId === item.id;
+                  return (
+                    <Card key={item.id} className="overflow-hidden">
+                      <button
+                        onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
+                        className="w-full text-left p-4 hover:bg-surface-secondary/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-body-sm font-medium text-text-primary line-clamp-2">
+                              {truncate(item.situation, 100)}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2 text-caption text-text-muted">
+                              <span>{formatDate(item.createdAt)}</span>
+                              <span>•</span>
+                              <span>{item.lenses.map((l) => LENSES.find((x) => x.id === l)?.name || l).join(', ')}</span>
+                            </div>
+                          </div>
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-text-muted shrink-0" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-text-muted shrink-0" />
+                          )}
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="px-4 pb-4 border-t border-border">
+                          <div className="mt-4 prose prose-sm whitespace-pre-wrap text-text-secondary">
+                            {item.analysis}
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

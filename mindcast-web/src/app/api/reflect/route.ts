@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { db } from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 import { checkRateLimit, rateLimits, rateLimitedResponse } from '@/lib/rate-limit';
 import { sanitizeContext, sanitizeStringArray } from '@/lib/sanitize';
@@ -12,6 +13,7 @@ const LENS_PROMPTS: Record<string, string> = {
   shadow: `**Shadow Lens**: Examine potential hidden motivations, fears, or desires that might be influencing the situation. What might the person be avoiding or not acknowledging to themselves?`,
 };
 
+// POST /api/reflect - Create a new reflection
 export async function POST(request: NextRequest) {
   const session = await auth();
 
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
     return rateLimitedResponse(rateLimit);
   }
 
-  const { situation: rawSituation, lenses: rawLenses } = await request.json();
+  const { situation: rawSituation, lenses: rawLenses, episodeId } = await request.json();
 
   if (!rawSituation || !rawLenses || !Array.isArray(rawLenses) || rawLenses.length === 0) {
     return NextResponse.json(
@@ -91,11 +93,81 @@ Provide a thoughtful analysis through each lens, then conclude with 3 actionable
       throw new Error('Unexpected response type');
     }
 
-    return NextResponse.json({ analysis: content.text });
+    const analysis = content.text;
+
+    // Save to database
+    const reflect = await db.reflect.create({
+      data: {
+        userId: session.user.id,
+        episodeId: episodeId || null,
+        situation,
+        analysis,
+        lenses: validLenses.join(','),
+      },
+    });
+
+    return NextResponse.json({
+      id: reflect.id,
+      analysis,
+      lenses: validLenses,
+      createdAt: reflect.createdAt,
+    });
   } catch (error) {
     console.error('Reflect error:', error);
     return NextResponse.json(
       { error: 'Failed to generate analysis' },
+      { status: 500 }
+    );
+  }
+}
+
+// GET /api/reflect - Get user's reflection history
+export async function GET(request: NextRequest) {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const limit = parseInt(searchParams.get('limit') || '20', 10);
+  const episodeId = searchParams.get('episodeId');
+
+  try {
+    const reflects = await db.reflect.findMany({
+      where: {
+        userId: session.user.id,
+        ...(episodeId ? { episodeId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(limit, 50),
+      select: {
+        id: true,
+        situation: true,
+        analysis: true,
+        lenses: true,
+        createdAt: true,
+        episodeId: true,
+        episode: episodeId ? {
+          select: {
+            title: true,
+            topic: true,
+          },
+        } : false,
+      },
+    });
+
+    // Transform lenses from comma-separated string to array
+    const transformed = reflects.map((r) => ({
+      ...r,
+      lenses: r.lenses.split(','),
+    }));
+
+    return NextResponse.json({ reflects: transformed });
+  } catch (error) {
+    console.error('Get reflects error:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch reflections' },
       { status: 500 }
     );
   }

@@ -90,6 +90,7 @@ export function InstantHost({
   const [textInput, setTextInput] = useState('');
   const [showTextInput, setShowTextInput] = useState(false); // Alternative to voice
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'host' | 'user', text: string}>>([]);
+  const [showTranscript, setShowTranscript] = useState(false); // Collapsed by default so audio feels central;
 
   // Mini-quiz state (collapsible entertainment while waiting)
   interface QuizQuestion {
@@ -352,6 +353,8 @@ export function InstantHost({
           };
           audio.onerror = () => setIsPlaying(false);
 
+          // Small delay to let browser buffer audio - prevents missing first words
+          await new Promise(resolve => setTimeout(resolve, 300));
           await audio.play();
         }
       } else {
@@ -531,6 +534,9 @@ export function InstantHost({
       };
 
       try {
+        // Small delay before playing to let browser buffer audio
+        // This prevents missing the first few words
+        await new Promise(resolve => setTimeout(resolve, 300));
         await audio.play();
       } catch {
         // If play fails, skip to next phase (no robotic fallback)
@@ -770,12 +776,29 @@ export function InstantHost({
         </div>
       )}
 
-      {/* Current Host Text */}
+      {/* Current Host Text - collapsed by default so audio feels central */}
       {currentText && phase !== 'listening' && (
-        <div className="rounded-lg bg-surface/80 p-3 mb-3">
-          <p className="text-body-sm text-text-secondary leading-relaxed">
-            "{currentText}"
-          </p>
+        <div className="rounded-lg bg-surface/80 mb-3 overflow-hidden">
+          <button
+            onClick={() => setShowTranscript(!showTranscript)}
+            className="w-full flex items-center justify-between px-3 py-2 hover:bg-surface-secondary/50 transition-colors"
+          >
+            <span className="text-xs text-text-muted">
+              {showTranscript ? 'Hide transcript' : 'Show what they\'re saying'}
+            </span>
+            {showTranscript ? (
+              <ChevronUp className="h-4 w-4 text-text-muted" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-text-muted" />
+            )}
+          </button>
+          {showTranscript && (
+            <div className="px-3 pb-3">
+              <p className="text-body-sm text-text-secondary leading-relaxed">
+                "{currentText}"
+              </p>
+            </div>
+          )}
         </div>
       )}
 

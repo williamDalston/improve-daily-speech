@@ -178,7 +178,7 @@ export default function PricingPage() {
         </Card>
 
         {/* Pro Plan */}
-        <Card className={cn(isPro ? 'ring-2 ring-brand' : 'ring-2 ring-brand')}>
+        <Card className={cn(isPro ? 'ring-2 ring-brand' : 'border-brand/50')}>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span className="flex items-center gap-2">
