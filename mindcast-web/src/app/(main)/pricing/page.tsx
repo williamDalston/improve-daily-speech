@@ -109,7 +109,7 @@ export default function PricingPage() {
           Choose Your Plan
         </h1>
         <p className="text-body-md text-text-secondary">
-          Unlock unlimited documentary-style learning
+          Unlock unlimited mind training on any topic
         </p>
       </div>
 

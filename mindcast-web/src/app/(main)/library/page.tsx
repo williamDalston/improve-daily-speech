@@ -117,15 +117,15 @@ export default async function LibraryPage() {
             <Headphones className="h-8 w-8 text-brand" />
           </div>
           <h2 className="mb-2 text-heading-md text-text-primary">
-            No episodes yet
+            No lessons yet
           </h2>
           <p className="mb-6 max-w-sm text-body-md text-text-secondary">
-            Create your first documentary-style audio episode on any topic
+            Start training your mind on any topic you want to master
           </p>
           <Link href="/create">
             <Button>
               <Plus className="h-4 w-4" />
-              Create First Episode
+              Start Training
             </Button>
           </Link>
         </div>

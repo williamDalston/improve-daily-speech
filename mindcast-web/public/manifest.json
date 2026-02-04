@@ -1,7 +1,7 @@
 {
   "name": "MindCast",
   "short_name": "MindCast",
-  "description": "AI-powered documentary audio learning. Transform any topic into captivating audio episodes.",
+  "description": "Your personal mind dojo. Turn any topic into an audio lesson that sticks.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -20,9 +20,9 @@
   ],
   "shortcuts": [
     {
-      "name": "Create Episode",
-      "short_name": "Create",
-      "description": "Start creating a new episode",
+      "name": "Start Training",
+      "short_name": "Train",
+      "description": "Create a new audio lesson",
       "url": "/create"
     },
     {

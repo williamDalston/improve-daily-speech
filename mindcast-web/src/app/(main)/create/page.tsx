@@ -617,10 +617,10 @@ export default function CreatePage() {
       {/* Header - more compact on mobile */}
       <div className="text-center">
         <h1 className="mb-1 text-2xl font-bold text-text-primary sm:text-display-sm">
-          Create Episode
+          Train Your Mind
         </h1>
         <p className="text-sm text-text-secondary sm:text-body-md">
-          Enter any topic for a documentary-style audio episode
+          Enter any topic and create an audio lesson that sticks
         </p>
       </div>
 

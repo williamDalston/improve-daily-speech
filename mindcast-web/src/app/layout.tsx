@@ -9,22 +9,22 @@ const siteUrl = process.env.NEXTAUTH_URL || 'https://mindcast.app';
 
 export const metadata: Metadata = {
   title: {
-    default: 'MindCast - AI-Powered Documentary Audio Learning',
+    default: 'MindCast - Sharpen Your Mind with AI',
     template: '%s | MindCast',
   },
   description:
-    'Transform any topic into a captivating documentary-style audio episode. AI-powered learning that sticks. Create, listen, and learn on the go.',
+    'Your personal mind dojo. Turn any topic into an audio lesson that sticks. Train your brain on the go with AI-powered learning.',
   keywords: [
     'AI learning',
-    'podcast generator',
-    'documentary audio',
-    'AI education',
     'audio learning',
+    'mind training',
+    'learn anything',
+    'AI education',
     'personalized learning',
-    'AI podcast',
-    'educational content',
+    'brain training',
+    'educational audio',
     'learning platform',
-    'text to speech',
+    'self improvement',
   ],
   authors: [{ name: 'MindCast' }],
   creator: 'MindCast',
@@ -37,17 +37,17 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: siteUrl,
     siteName: 'MindCast',
-    title: 'MindCast - AI-Powered Documentary Audio Learning',
+    title: 'MindCast - Sharpen Your Mind with AI',
     description:
-      'Transform any topic into a captivating documentary-style audio episode. AI-powered learning that sticks.',
+      'Your personal mind dojo. Turn any topic into an audio lesson that sticks. Train your brain on the go.',
   },
 
   // Twitter Card
   twitter: {
     card: 'summary',
-    title: 'MindCast - AI-Powered Documentary Audio Learning',
+    title: 'MindCast - Sharpen Your Mind with AI',
     description:
-      'Transform any topic into a captivating documentary-style audio episode.',
+      'Your personal mind dojo. Turn any topic into an audio lesson that sticks.',
     creator: '@mindcastapp',
   },
 

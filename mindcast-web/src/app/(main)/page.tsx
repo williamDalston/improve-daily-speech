@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Sparkles, Headphones, Brain, Zap } from 'lucide-react';
+import { Sparkles, Headphones, Brain, Zap, Target, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function HomePage() {
@@ -9,30 +9,30 @@ export default function HomePage() {
       <section className="py-16 text-center md:py-24">
         <div className="mb-6 inline-flex items-center gap-2 rounded-full bg-brand/10 px-4 py-2 text-body-sm text-brand">
           <Sparkles className="h-4 w-4" />
-          AI-Powered Learning
+          Your Personal Mind Dojo
         </div>
 
         <h1 className="mb-6 text-display-lg text-text-primary md:text-[4rem]">
-          Turn Any Topic Into a{' '}
+          Sharpen Your Mind{' '}
           <span className="bg-brand-gradient bg-clip-text text-transparent">
-            Documentary
+            On Any Topic
           </span>
         </h1>
 
         <p className="mx-auto mb-8 max-w-2xl text-body-lg text-text-secondary">
-          MindCast transforms any subject into captivating, documentary-style audio
-          episodes. Learn like you're watching BBC or PBS — but for your ears.
+          Turn any subject into an audio lesson that actually sticks.
+          Learn while you commute, exercise, or relax — and watch your knowledge grow.
         </p>
 
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <Link href="/create">
             <Button size="lg" className="min-w-[180px]">
-              Create Episode
+              Start Training
             </Button>
           </Link>
           <Link href="/library">
             <Button variant="outline" size="lg" className="min-w-[180px]">
-              Browse Library
+              Your Library
             </Button>
           </Link>
         </div>
@@ -42,19 +42,19 @@ export default function HomePage() {
       <section className="w-full py-16">
         <div className="grid gap-8 md:grid-cols-3">
           <FeatureCard
-            icon={<Headphones className="h-6 w-6" />}
-            title="Documentary Quality"
-            description="Multi-stage AI pipeline with research, dual drafts, and 4 enhancement passes for exceptional content."
+            icon={<Brain className="h-6 w-6" />}
+            title="Learn Anything"
+            description="From quantum physics to philosophy — enter any topic and get a lesson tailored to how you learn."
           />
           <FeatureCard
-            icon={<Brain className="h-6 w-6" />}
-            title="Deep Learning"
-            description="Content designed to stick. Narrative arcs, thought experiments, and memorable insights."
+            icon={<Headphones className="h-6 w-6" />}
+            title="Audio That Sticks"
+            description="Multi-stage AI creates content designed for retention. Narratives, examples, and insights that stay with you."
           />
           <FeatureCard
             icon={<Zap className="h-6 w-6" />}
-            title="Any Topic"
-            description="From quantum physics to stoic philosophy — enter any subject and get expert-level content."
+            title="Train On The Go"
+            description="Turn dead time into growth time. Learn during commutes, workouts, or while doing chores."
           />
         </div>
       </section>
@@ -62,15 +62,15 @@ export default function HomePage() {
       {/* How it works */}
       <section className="w-full py-16">
         <h2 className="mb-12 text-center text-display-sm text-text-primary">
-          How It Works
+          Your Training Flow
         </h2>
 
         <div className="grid gap-6 md:grid-cols-4">
           {[
-            { step: '1', title: 'Enter Topic', desc: 'Type any subject you want to learn about' },
-            { step: '2', title: 'AI Pipeline', desc: '6-stage enhancement for documentary quality' },
-            { step: '3', title: 'Listen', desc: 'Stream your personalized audio episode' },
-            { step: '4', title: 'Reflect', desc: 'Deepen understanding with Sovereign Mind lens' },
+            { step: '1', title: 'Choose Topic', desc: 'Pick anything you want to understand better' },
+            { step: '2', title: 'AI Crafts It', desc: '6-stage process for maximum retention' },
+            { step: '3', title: 'Listen & Learn', desc: 'Stream your personalized audio lesson' },
+            { step: '4', title: 'Go Deeper', desc: 'Reflect and solidify your understanding' },
           ].map((item) => (
             <div
               key={item.step}
@@ -86,19 +86,44 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Why it works */}
+      <section className="w-full py-16">
+        <h2 className="mb-12 text-center text-display-sm text-text-primary">
+          Why Audio Learning Works
+        </h2>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="rounded-2xl border border-border bg-surface p-8">
+            <Target className="mb-4 h-8 w-8 text-brand" />
+            <h3 className="mb-3 text-heading-md text-text-primary">Active Recall</h3>
+            <p className="text-body-md text-text-secondary">
+              Listening engages your brain differently than reading.
+              Our AI structures content to trigger active recall and build lasting connections.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-surface p-8">
+            <TrendingUp className="mb-4 h-8 w-8 text-brand" />
+            <h3 className="mb-3 text-heading-md text-text-primary">Consistent Growth</h3>
+            <p className="text-body-md text-text-secondary">
+              Small daily sessions compound into massive knowledge gains.
+              Track your streak and watch your understanding deepen over time.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="w-full rounded-3xl bg-brand-gradient p-12 text-center text-white">
-        <h2 className="mb-4 text-display-sm">Ready to Learn Differently?</h2>
+        <h2 className="mb-4 text-display-sm">Ready to Level Up?</h2>
         <p className="mx-auto mb-8 max-w-xl text-body-lg opacity-90">
-          Create your first documentary episode in minutes. No credit card required
-          for your first 3 episodes.
+          Start training your mind today. Your first 3 lessons are free — no credit card needed.
         </p>
         <Link href="/create">
           <Button
             size="lg"
             className="bg-white text-brand hover:bg-white/90"
           >
-            Get Started Free
+            Start Learning Free
           </Button>
         </Link>
       </section>

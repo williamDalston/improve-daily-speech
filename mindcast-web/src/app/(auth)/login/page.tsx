@@ -121,8 +121,8 @@ export default function LoginPage() {
           </CardTitle>
           <CardDescription>
             {isSignUp
-              ? 'Sign up to create documentary-style audio episodes'
-              : 'Sign in to create documentary-style audio episodes'}
+              ? 'Sign up and start sharpening your mind'
+              : 'Sign in to your personal mind dojo'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
