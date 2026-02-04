@@ -678,14 +678,13 @@ export function InstantHost({
         // After intro, ask for mic permission (only once)
         if (targetPhase === 'intro' && !micPermissionAsked) {
           if (isMobile) {
-            // Mobile: auto-request mic and start conversation — no tap needed
+            // Mobile: show loading immediately, auto-request mic — no tap needed
+            setPhase('responding');
+            setIsLoadingAudio(true);
             requestMicPermission().then((granted) => {
-              if (granted) {
-                startProactiveConversation();
-              } else {
-                // Mic denied — show text input as fallback
-                setPhase('listening');
-              }
+              // Whether granted or denied, start the conversation
+              // (denied auto-falls back to text input via requestMicPermission)
+              startProactiveConversation();
             });
           } else {
             setPhase('listening'); // Desktop: show permission prompt
@@ -1136,14 +1135,14 @@ export function InstantHost({
               : phase === 'almost_ready'
                 ? 'Almost there...'
                 : phase === 'responding'
-                  ? 'Thinking about what you said...'
+                  ? conversationHistory.length > 0 ? 'Thinking about what you said...' : 'Starting conversation...'
                   : 'Gathering thoughts...'}
           </span>
         </div>
       )}
 
-      {/* Mic Permission Prompt - shown after intro if not yet asked */}
-      {phase === 'listening' && !micPermissionAsked && (
+      {/* Mic Permission Prompt - desktop only (mobile auto-requests) */}
+      {phase === 'listening' && !micPermissionAsked && !isMobile && (
         <div className="space-y-3 mt-3 p-3 rounded-xl bg-surface-secondary">
           <p className="text-sm text-text-primary text-center">
             Want to chat while your episode generates?
