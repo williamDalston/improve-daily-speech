@@ -1,11 +1,79 @@
 'use client';
 
+import { useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      if (isSignUp) {
+        // Sign up
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, name }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setError(data.error || 'Failed to create account');
+          setIsLoading(false);
+          return;
+        }
+
+        // Auto sign in after signup
+        const result = await signIn('credentials', {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          setError('Account created. Please sign in.');
+          setIsSignUp(false);
+        } else {
+          router.push('/create');
+        }
+      } else {
+        // Sign in
+        const result = await signIn('credentials', {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          setError('Invalid email or password');
+        } else {
+          router.push('/create');
+        }
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -13,17 +81,23 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-gradient">
             <Sparkles className="h-6 w-6 text-white" />
           </div>
-          <CardTitle className="text-display-sm">Welcome to MindCast</CardTitle>
+          <CardTitle className="text-display-sm">
+            {isSignUp ? 'Create Account' : 'Welcome to MindCast'}
+          </CardTitle>
           <CardDescription>
-            Sign in to create documentary-style audio episodes
+            {isSignUp
+              ? 'Sign up to create documentary-style audio episodes'
+              : 'Sign in to create documentary-style audio episodes'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Google Sign In */}
           <Button
             variant="outline"
             size="lg"
             onClick={() => signIn('google', { callbackUrl: '/create' })}
             className="w-full"
+            disabled={isLoading}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path
@@ -45,6 +119,99 @@ export default function LoginPage() {
             </svg>
             Continue with Google
           </Button>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-surface px-2 text-text-muted">or</span>
+            </div>
+          </div>
+
+          {/* Email/Password Form */}
+          <form onSubmit={handleEmailAuth} className="space-y-3">
+            {isSignUp && (
+              <Input
+                type="text"
+                placeholder="Name (optional)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={isLoading}
+              />
+            )}
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+            <Input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              disabled={isLoading}
+            />
+
+            {error && (
+              <p className="text-sm text-red-500 text-center">{error}</p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {isSignUp ? 'Creating account...' : 'Signing in...'}
+                </>
+              ) : (
+                isSignUp ? 'Create Account' : 'Sign In'
+              )}
+            </Button>
+          </form>
+
+          {/* Toggle Sign Up / Sign In */}
+          <p className="text-center text-caption text-text-muted">
+            {isSignUp ? (
+              <>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSignUp(false);
+                    setError('');
+                  }}
+                  className="text-brand hover:underline font-medium"
+                >
+                  Sign in
+                </button>
+              </>
+            ) : (
+              <>
+                Don&apos;t have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSignUp(true);
+                    setError('');
+                  }}
+                  className="text-brand hover:underline font-medium"
+                >
+                  Sign up
+                </button>
+              </>
+            )}
+          </p>
 
           <p className="text-center text-caption text-text-muted">
             By signing in, you agree to our Terms of Service and Privacy Policy
