@@ -915,7 +915,7 @@ export function InstantHost({
               <Waves className="h-5 w-5" />
             </button>
             {showAmbientMenu && (
-              <div className="absolute right-0 top-full mt-1 w-36 rounded-xl border border-border bg-surface p-1 shadow-lg z-10">
+              <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-36 rounded-xl border border-border bg-surface p-1 shadow-lg z-10">
                 {AMBIENT_SOUNDS.map((sound) => (
                   <button
                     key={sound.id}
