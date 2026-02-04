@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { canCreateEpisode } from '@/lib/stripe';
@@ -6,6 +7,7 @@ import { processJob } from '@/lib/jobs/processor';
 import { checkRateLimit, rateLimits, rateLimitedResponse, getRateLimitHeaders } from '@/lib/rate-limit';
 import { sanitizeTopic, sanitizeContext, hasInappropriateContent } from '@/lib/sanitize';
 
+export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max for Vercel
 
 // POST /api/jobs - Create a new generation job
@@ -82,11 +84,13 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  // Start processing in the background (non-blocking)
-  // The processJob function handles its own errors and updates the job status
-  processJob(job.id, session.user.id, session.user.isPro ?? false).catch((err) => {
-    console.error('Job processing failed:', err);
-  });
+  // Start processing in the background using waitUntil to keep function alive
+  // This ensures the job continues even after HTTP response is sent
+  waitUntil(
+    processJob(job.id, session.user.id, session.user.isPro ?? false).catch((err) => {
+      console.error('Job processing failed:', err);
+    })
+  );
 
   return NextResponse.json(
     {
