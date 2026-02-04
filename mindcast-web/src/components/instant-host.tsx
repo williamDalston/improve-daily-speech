@@ -564,7 +564,13 @@ export function InstantHost({
           </div>
           <div>
             <p className="text-sm font-semibold text-text-primary">
-              {phase === 'asking' ? 'Your episode is ready!' : phase === 'listening' ? 'Listening to you...' : 'Your AI Host'}
+              {phase === 'asking'
+                ? 'Your episode is ready!'
+                : phase === 'listening' && micPermissionAsked
+                  ? 'Your turn to chat!'
+                  : phase === 'listening'
+                    ? 'Want to have a conversation?'
+                    : 'Your AI Host'}
             </p>
             <p className="text-xs text-text-muted">
               {isListening
@@ -575,9 +581,11 @@ export function InstantHost({
                     ? 'Thinking...'
                     : phase === 'asking'
                       ? 'Tap to listen'
-                      : phase === 'responding'
-                        ? 'Processing...'
-                        : 'Preparing...'}
+                      : phase === 'listening' && micPermissionAsked
+                        ? 'Ask anything or tap a suggestion'
+                        : phase === 'responding'
+                          ? 'Processing...'
+                          : 'Preparing...'}
             </p>
           </div>
         </div>
@@ -753,14 +761,52 @@ export function InstantHost({
 
       {/* Text Input for typing responses */}
       {showTextInput && phase === 'listening' && micPermissionAsked && (
-        <div className="mt-3">
+        <div className="mt-3 space-y-3">
+          {/* Conversation prompts for text input */}
+          {conversationHistory.length === 0 && (
+            <div className="rounded-xl bg-surface-secondary/50 p-3 space-y-2">
+              <p className="text-sm text-text-secondary text-center">
+                Ask me anything about <span className="font-medium text-text-primary">{topic.slice(0, 30)}{topic.length > 30 ? '...' : ''}</span>
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {[
+                  `What fascinates you about this?`,
+                  `Tell me something surprising`,
+                  `Why does this matter?`,
+                ].map((prompt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleUserInput(prompt)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-brand/30 text-brand hover:bg-brand/10 transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {conversationHistory.length > 0 && (
+            <div className="flex flex-wrap gap-2 justify-center">
+              {[`Tell me more`, `Give an example`, `What else?`].map((prompt, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleUserInput(prompt)}
+                  className="text-xs px-3 py-1.5 rounded-full border border-brand/30 text-brand hover:bg-brand/10 transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2 sm:flex-row">
             <input
               type="text"
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleTextSubmit()}
-              placeholder="Type your thought..."
+              placeholder="Type your question or thought..."
               className="flex-1 rounded-xl border border-border bg-surface px-3 py-3 text-base text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand/30 sm:py-2.5 sm:text-sm"
             />
             <button
@@ -768,7 +814,9 @@ export function InstantHost({
               disabled={!textInput.trim()}
               className="w-full rounded-xl bg-brand px-4 py-3 text-base text-white font-medium transition-all hover:bg-brand/90 disabled:opacity-50 sm:w-auto sm:py-2.5 sm:text-sm"
             >
-              Send
+              <Send className="h-4 w-4 sm:hidden" />
+              <span className="sm:inline hidden">Send</span>
+              <span className="sm:hidden">Send</span>
             </button>
           </div>
           <button
@@ -776,7 +824,7 @@ export function InstantHost({
               const nextPhase = phaseCountRef.current < 2 ? 'deep_dive' : 'curiosity';
               generateAndSpeak(nextPhase);
             }}
-            className="w-full text-sm text-text-muted hover:text-text-secondary text-center py-2 mt-1 sm:text-xs"
+            className="w-full text-sm text-text-muted hover:text-text-secondary text-center py-2 sm:text-xs"
           >
             Skip — continue listening
           </button>
@@ -785,7 +833,55 @@ export function InstantHost({
 
       {/* Voice listening state */}
       {micEnabled && phase === 'listening' && micPermissionAsked && !showTextInput && (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-3">
+          {/* Conversation prompts - help user know what to say */}
+          {!isListening && conversationHistory.length === 0 && (
+            <div className="rounded-xl bg-surface-secondary/50 p-3 space-y-2">
+              <p className="text-sm text-text-secondary text-center">
+                Ask me anything about <span className="font-medium text-text-primary">{topic.slice(0, 30)}{topic.length > 30 ? '...' : ''}</span>
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {[
+                  `What fascinates you about this?`,
+                  `Tell me something surprising`,
+                  `Why does this matter?`,
+                ].map((prompt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleUserInput(prompt)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-brand/30 text-brand hover:bg-brand/10 transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Continue the conversation prompt */}
+          {!isListening && conversationHistory.length > 0 && (
+            <div className="rounded-xl bg-surface-secondary/50 p-3">
+              <p className="text-sm text-text-secondary text-center mb-2">
+                Continue the conversation or ask follow-up questions
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {[
+                  `Tell me more`,
+                  `Can you give an example?`,
+                  `What else should I know?`,
+                ].map((prompt, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleUserInput(prompt)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-brand/30 text-brand hover:bg-brand/10 transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {isListening ? (
             <div className="flex items-center justify-center gap-2 py-4 rounded-xl bg-success/10 border border-success/30 sm:py-3">
               <div className="w-3 h-3 rounded-full bg-success animate-pulse" />
@@ -799,7 +895,7 @@ export function InstantHost({
               className="w-full flex items-center justify-center gap-2 rounded-xl border border-brand/30 bg-brand/5 px-4 py-4 text-base text-brand font-medium transition-all hover:bg-brand/10 sm:py-3 sm:text-sm"
             >
               <Mic className="h-5 w-5" />
-              Tap to speak
+              Tap to speak your own question
             </button>
           )}
           <div className="flex gap-2 text-sm sm:text-xs">
