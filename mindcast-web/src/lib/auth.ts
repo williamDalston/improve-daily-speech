@@ -1,15 +1,13 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
+import { PrismaAdapter } from '@auth/prisma-adapter';
 import { db } from './db';
 import bcrypt from 'bcryptjs';
-
-// Temporarily disabled PrismaAdapter to debug constructor error
-// import { PrismaAdapter } from '@auth/prisma-adapter';
-// import type { Adapter } from 'next-auth/adapters';
+import type { Adapter } from 'next-auth/adapters';
 
 const authConfig = {
-  // adapter: PrismaAdapter(db) as Adapter, // Temporarily disabled
+  adapter: PrismaAdapter(db) as Adapter,
   trustHost: true, // Required for Vercel deployment with NextAuth v5
   session: {
     strategy: 'jwt' as const,
