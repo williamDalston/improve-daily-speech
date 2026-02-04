@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -12,11 +12,46 @@ export default function LoginPage() {
   const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDemoLoading, setIsDemoLoading] = useState(false);
   const [error, setError] = useState('');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+
+  const handleDemoLogin = async () => {
+    setError('');
+    setIsDemoLoading(true);
+
+    try {
+      // Get demo credentials
+      const res = await fetch('/api/auth/demo');
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to setup demo');
+        setIsDemoLoading(false);
+        return;
+      }
+
+      // Sign in with demo credentials
+      const result = await signIn('credentials', {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError('Demo login failed. Please try again.');
+      } else {
+        router.push('/create');
+      }
+    } catch {
+      setError('Something went wrong. Please try again.');
+    } finally {
+      setIsDemoLoading(false);
+    }
+  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,13 +126,43 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Try as Guest - Quick Demo */}
+          <Button
+            size="lg"
+            onClick={handleDemoLogin}
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+            disabled={isLoading || isDemoLoading}
+          >
+            {isDemoLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Setting up demo...
+              </>
+            ) : (
+              <>
+                <Zap className="mr-2 h-4 w-4" />
+                Try as Guest (Full Access)
+              </>
+            )}
+          </Button>
+
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-surface px-2 text-text-muted">or sign in</span>
+            </div>
+          </div>
+
           {/* Google Sign In */}
           <Button
             variant="outline"
             size="lg"
             onClick={() => signIn('google', { callbackUrl: '/create' })}
             className="w-full"
-            disabled={isLoading}
+            disabled={isLoading || isDemoLoading}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path
@@ -138,7 +203,7 @@ export default function LoginPage() {
                 placeholder="Name (optional)"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={isLoading}
+                disabled={isLoading || isDemoLoading}
               />
             )}
             <Input
@@ -147,7 +212,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              disabled={isLoading}
+              disabled={isLoading || isDemoLoading}
             />
             <Input
               type="password"
@@ -156,7 +221,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              disabled={isLoading}
+              disabled={isLoading || isDemoLoading}
             />
 
             {error && (
@@ -167,7 +232,7 @@ export default function LoginPage() {
               type="submit"
               size="lg"
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || isDemoLoading}
             >
               {isLoading ? (
                 <>
