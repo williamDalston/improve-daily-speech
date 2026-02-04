@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { generateAddon } from '@/lib/ai/pipeline';
+import { checkRateLimit, rateLimits, rateLimitedResponse } from '@/lib/rate-limit';
+import { sanitizeId } from '@/lib/sanitize';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -10,13 +12,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { episodeId, addonType } = await request.json();
+  // Rate limiting
+  const rateLimit = checkRateLimit(session.user.id, rateLimits.addon);
+  if (!rateLimit.success) {
+    return rateLimitedResponse(rateLimit);
+  }
 
-  if (!episodeId || !addonType) {
+  const { episodeId: rawEpisodeId, addonType } = await request.json();
+
+  if (!rawEpisodeId || !addonType) {
     return NextResponse.json(
       { error: 'episodeId and addonType are required' },
       { status: 400 }
     );
+  }
+
+  // Validate and sanitize inputs
+  const episodeId = sanitizeId(rawEpisodeId);
+  if (!episodeId) {
+    return NextResponse.json({ error: 'Invalid episode ID' }, { status: 400 });
   }
 
   if (!['quiz', 'journal', 'takeaways'].includes(addonType)) {

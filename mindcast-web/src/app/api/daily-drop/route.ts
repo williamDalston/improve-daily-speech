@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { canCreateEpisode } from '@/lib/stripe';
 import { processJob } from '@/lib/jobs/processor';
+import { checkRateLimit, rateLimits, rateLimitedResponse } from '@/lib/rate-limit';
+import { sanitizeStringArray } from '@/lib/sanitize';
 
 // Default interest categories for Daily Drop
 const INTEREST_CATEGORIES = [
@@ -108,6 +110,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Rate limiting
+  const rateLimit = checkRateLimit(session.user.id, rateLimits.dailyDrop);
+  if (!rateLimit.success) {
+    return rateLimitedResponse(rateLimit);
+  }
+
   // Check subscription/limits
   const access = await canCreateEpisode(session.user.id);
   if (!access.allowed) {
@@ -207,14 +215,23 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { interests, listeningMode, narratorTone } = await request.json();
+  const { interests: rawInterests, listeningMode, narratorTone } = await request.json();
+
+  // Sanitize and validate inputs
+  const validInterests = INTEREST_CATEGORIES.map(c => c.id);
+  const interests = rawInterests
+    ? sanitizeStringArray(rawInterests).filter(i => validInterests.includes(i))
+    : undefined;
+
+  const validListeningModes = ['commute', 'deep_dive'];
+  const validNarratorTones = ['bbc_calm', 'playful_professor', 'no_fluff'];
 
   await db.user.update({
     where: { id: session.user.id },
     data: {
       ...(interests !== undefined && { interests }),
-      ...(listeningMode !== undefined && { listeningMode }),
-      ...(narratorTone !== undefined && { narratorTone }),
+      ...(listeningMode !== undefined && validListeningModes.includes(listeningMode) && { listeningMode }),
+      ...(narratorTone !== undefined && validNarratorTones.includes(narratorTone) && { narratorTone }),
     },
   });
 

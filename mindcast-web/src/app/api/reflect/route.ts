@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import Anthropic from '@anthropic-ai/sdk';
+import { checkRateLimit, rateLimits, rateLimitedResponse } from '@/lib/rate-limit';
+import { sanitizeContext, sanitizeStringArray } from '@/lib/sanitize';
 
 const LENS_PROMPTS: Record<string, string> = {
   stoic: `**Stoic Lens**: Analyze what is within the person's control versus what is not. Focus on virtue, acceptance, and practical wisdom. What would Marcus Aurelius or Epictetus advise?`,
@@ -17,14 +19,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { situation, lenses } = await request.json();
+  // Rate limiting
+  const rateLimit = checkRateLimit(session.user.id, rateLimits.reflect);
+  if (!rateLimit.success) {
+    return rateLimitedResponse(rateLimit);
+  }
 
-  if (!situation || !lenses || !Array.isArray(lenses) || lenses.length === 0) {
+  const { situation: rawSituation, lenses: rawLenses } = await request.json();
+
+  if (!rawSituation || !rawLenses || !Array.isArray(rawLenses) || rawLenses.length === 0) {
     return NextResponse.json(
       { error: 'Situation and at least one lens are required' },
       { status: 400 }
     );
   }
+
+  // Sanitize inputs
+  const situation = sanitizeContext(rawSituation);
+  if (!situation || situation.length < 10) {
+    return NextResponse.json(
+      { error: 'Please provide more detail about your situation' },
+      { status: 400 }
+    );
+  }
+
+  const lenses = sanitizeStringArray(rawLenses);
 
   // Validate lenses
   const validLenses = lenses.filter((l: string) => l in LENS_PROMPTS);

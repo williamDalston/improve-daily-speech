@@ -3,6 +3,8 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { canCreateEpisode } from '@/lib/stripe';
 import { processJob } from '@/lib/jobs/processor';
+import { checkRateLimit, rateLimits, rateLimitedResponse, getRateLimitHeaders } from '@/lib/rate-limit';
+import { sanitizeTopic, sanitizeContext, hasInappropriateContent } from '@/lib/sanitize';
 
 export const maxDuration = 300; // 5 minutes max for Vercel
 
@@ -14,14 +16,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { topic, length = '10 min', style = '' } = await request.json();
+  // Rate limiting - use user ID for authenticated requests
+  const rateLimit = checkRateLimit(session.user.id, rateLimits.generate);
+  if (!rateLimit.success) {
+    return rateLimitedResponse(rateLimit);
+  }
 
-  if (!topic || typeof topic !== 'string') {
+  const { topic: rawTopic, length = '10 min', style = '' } = await request.json();
+
+  if (!rawTopic || typeof rawTopic !== 'string') {
     return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
   }
 
+  // Sanitize inputs
+  const topic = sanitizeTopic(rawTopic);
+  if (!topic || topic.length < 3) {
+    return NextResponse.json({ error: 'Topic must be at least 3 characters' }, { status: 400 });
+  }
+
+  // Content moderation
+  if (hasInappropriateContent(topic)) {
+    return NextResponse.json(
+      { error: 'This topic cannot be processed. Please try a different topic.' },
+      { status: 400 }
+    );
+  }
+
   // Style is an optional tone/perspective modifier
-  const stylePrompt = typeof style === 'string' ? style : '';
+  const stylePrompt = typeof style === 'string' ? sanitizeContext(style) : '';
 
   // Check if user can create episode
   const access = await canCreateEpisode(session.user.id);
@@ -66,11 +88,16 @@ export async function POST(request: NextRequest) {
     console.error('Job processing failed:', err);
   });
 
-  return NextResponse.json({
-    jobId: job.id,
-    status: 'PENDING',
-    message: 'Job created successfully',
-  });
+  return NextResponse.json(
+    {
+      jobId: job.id,
+      status: 'PENDING',
+      message: 'Job created successfully',
+    },
+    {
+      headers: getRateLimitHeaders(rateLimit),
+    }
+  );
 }
 
 // GET /api/jobs - List user's jobs

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import OpenAI from 'openai';
+import { checkRateLimit, rateLimits, rateLimitedResponse } from '@/lib/rate-limit';
+import { sanitizeQuestion, sanitizeId } from '@/lib/sanitize';
 
 // Lazy-load OpenAI client to avoid build-time errors
 let openaiClient: OpenAI | null = null;
@@ -26,16 +28,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { question, currentTime } = await request.json();
+  // Rate limiting
+  const rateLimit = checkRateLimit(session.user.id, rateLimits.ask);
+  if (!rateLimit.success) {
+    return rateLimitedResponse(rateLimit);
+  }
 
-  if (!question || typeof question !== 'string') {
+  // Validate episode ID
+  const episodeId = sanitizeId(params.id);
+  if (!episodeId) {
+    return NextResponse.json({ error: 'Invalid episode ID' }, { status: 400 });
+  }
+
+  const { question: rawQuestion, currentTime } = await request.json();
+
+  if (!rawQuestion || typeof rawQuestion !== 'string') {
     return NextResponse.json({ error: 'Question is required' }, { status: 400 });
+  }
+
+  // Sanitize question
+  const question = sanitizeQuestion(rawQuestion);
+  if (!question || question.length < 3) {
+    return NextResponse.json({ error: 'Question must be at least 3 characters' }, { status: 400 });
   }
 
   // Get the episode
   const episode = await db.episode.findFirst({
     where: {
-      id: params.id,
+      id: episodeId,
       userId: session.user.id,
     },
     select: {
