@@ -29,33 +29,38 @@ export const {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        try {
+          if (!credentials?.email || !credentials?.password) {
+            return null;
+          }
+
+          const email = credentials.email as string;
+          const password = credentials.password as string;
+
+          const user = await db.user.findUnique({
+            where: { email },
+          });
+
+          if (!user || !user.password) {
+            return null;
+          }
+
+          const passwordMatch = await bcrypt.compare(password, user.password);
+
+          if (!passwordMatch) {
+            return null;
+          }
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+          };
+        } catch (error) {
+          console.error('Authorize error:', error);
           return null;
         }
-
-        const email = credentials.email as string;
-        const password = credentials.password as string;
-
-        const user = await db.user.findUnique({
-          where: { email },
-        });
-
-        if (!user || !user.password) {
-          return null;
-        }
-
-        const passwordMatch = await bcrypt.compare(password, user.password);
-
-        if (!passwordMatch) {
-          return null;
-        }
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-        };
       },
     }),
   ],
@@ -64,40 +69,48 @@ export const {
   },
   callbacks: {
     async jwt({ token, user, account }) {
-      if (user) {
-        token.id = user.id;
-      }
-      // For OAuth providers, get user ID from database
-      if (account && account.provider !== 'credentials') {
-        const dbUser = await db.user.findUnique({
-          where: { email: token.email! },
-          select: { id: true },
-        });
-        if (dbUser) {
-          token.id = dbUser.id;
+      try {
+        if (user) {
+          token.id = user.id;
         }
+        // For OAuth providers, get user ID from database
+        if (account && account.provider !== 'credentials') {
+          const dbUser = await db.user.findUnique({
+            where: { email: token.email! },
+            select: { id: true },
+          });
+          if (dbUser) {
+            token.id = dbUser.id;
+          }
+        }
+      } catch (error) {
+        console.error('JWT callback error:', error);
       }
       return token;
     },
     async session({ session, token }) {
-      if (session.user && token.id) {
-        session.user.id = token.id as string;
+      try {
+        if (session.user && token.id) {
+          session.user.id = token.id as string;
 
-        // Fetch subscription status
-        const dbUser = await db.user.findUnique({
-          where: { id: token.id as string },
-          select: {
-            subscriptionStatus: true,
-            freeEpisodesUsed: true,
-            subscriptionEndsAt: true,
-          },
-        });
+          // Fetch subscription status
+          const dbUser = await db.user.findUnique({
+            where: { id: token.id as string },
+            select: {
+              subscriptionStatus: true,
+              freeEpisodesUsed: true,
+              subscriptionEndsAt: true,
+            },
+          });
 
-        if (dbUser) {
-          session.user.subscriptionStatus = dbUser.subscriptionStatus;
-          session.user.freeEpisodesUsed = dbUser.freeEpisodesUsed;
-          session.user.isPro = dbUser.subscriptionStatus === 'active';
+          if (dbUser) {
+            session.user.subscriptionStatus = dbUser.subscriptionStatus;
+            session.user.freeEpisodesUsed = dbUser.freeEpisodesUsed;
+            session.user.isPro = dbUser.subscriptionStatus === 'active';
+          }
         }
+      } catch (error) {
+        console.error('Session callback error:', error);
       }
       return session;
     },

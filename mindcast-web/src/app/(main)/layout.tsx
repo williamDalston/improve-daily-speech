@@ -10,16 +10,24 @@ export default async function MainLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Check onboarding status server-side
+  // Check onboarding status server-side with error handling
   let onboardingCompleted = true;
-  const session = await auth();
 
-  if (session?.user?.id) {
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: { onboardingCompleted: true },
-    });
-    onboardingCompleted = user?.onboardingCompleted ?? false;
+  try {
+    const session = await auth();
+
+    if (session?.user?.id) {
+      const user = await db.user.findUnique({
+        where: { id: session.user.id },
+        select: { onboardingCompleted: true },
+      });
+      onboardingCompleted = user?.onboardingCompleted ?? false;
+    }
+  } catch (error) {
+    // Log error but don't crash the page
+    console.error('Layout auth error:', error);
+    // Default to true to skip onboarding if there's an error
+    onboardingCompleted = true;
   }
 
   return (
