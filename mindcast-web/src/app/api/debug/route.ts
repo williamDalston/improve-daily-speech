@@ -9,8 +9,15 @@ export async function GET() {
   const checks: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
     nodeEnv: process.env.NODE_ENV,
+    // Database
     hasDbUrl: !!process.env.DATABASE_URL,
     dbUrlPrefix: process.env.DATABASE_URL?.substring(0, 30) + '...',
+    // Auth - check if these are set (don't reveal values)
+    hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
+    hasNextAuthUrl: !!process.env.NEXTAUTH_URL,
+    nextAuthUrl: process.env.NEXTAUTH_URL || 'NOT SET',
+    hasGoogleClientId: !!process.env.GOOGLE_CLIENT_ID,
+    hasGoogleClientSecret: !!process.env.GOOGLE_CLIENT_SECRET,
   };
 
   try {
