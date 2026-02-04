@@ -39,42 +39,44 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        <Link href="/library">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge
-              variant={
-                episode.status === 'READY'
-                  ? 'success'
-                  : episode.status === 'PROCESSING'
-                  ? 'warning'
-                  : 'secondary'
-              }
-            >
-              {episode.status}
-            </Badge>
-            <span className="text-caption text-text-muted">
-              {formatDate(episode.createdAt)}
-            </span>
-            {episode.audioDurationSecs && (
+      {/* Header - responsive layout */}
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 sm:gap-4">
+          <Link href="/library">
+            <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-10 sm:w-10 touch-manipulation">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div className="flex-1 min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge
+                variant={
+                  episode.status === 'READY'
+                    ? 'success'
+                    : episode.status === 'PROCESSING'
+                    ? 'warning'
+                    : 'secondary'
+                }
+              >
+                {episode.status}
+              </Badge>
               <span className="text-caption text-text-muted">
-                • {formatDuration(episode.audioDurationSecs)}
+                {formatDate(episode.createdAt)}
               </span>
-            )}
+              {episode.audioDurationSecs && (
+                <span className="text-caption text-text-muted">
+                  • {formatDuration(episode.audioDurationSecs)}
+                </span>
+              )}
+            </div>
+            <h1 className="text-xl font-bold text-text-primary sm:text-display-sm break-words">
+              {episode.title || episode.topic}
+            </h1>
           </div>
-          <h1 className="text-display-sm text-text-primary">
-            {episode.title || episode.topic}
-          </h1>
         </div>
-        {/* Action buttons */}
+        {/* Action buttons - full width on mobile */}
         {episode.status === 'READY' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
             <AddToPlaylistButton
               episodeId={episode.id}
               episodeTitle={episode.title || episode.topic}
@@ -127,8 +129,8 @@ export default async function EpisodePage({ params }: EpisodePageProps) {
       {/* Learning Add-ons */}
       {episode.status === 'READY' && episode.transcript && (
         <div className="space-y-4">
-          <h2 className="text-heading-lg text-text-primary">Learning Tools</h2>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <h2 className="text-lg font-semibold text-text-primary sm:text-heading-lg">Learning Tools</h2>
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <AddonSection
               episodeId={episode.id}
               addonType="takeaways"

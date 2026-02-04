@@ -64,7 +64,7 @@ export function Navbar() {
                   </Badge>
                 )}
                 <div className="relative group">
-                  <button className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-sm font-medium text-brand transition-colors hover:bg-brand/20">
+                  <button className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center rounded-full bg-brand/10 text-sm font-medium text-brand transition-colors hover:bg-brand/20 active:bg-brand/30 touch-manipulation">
                     {session.user.image ? (
                       <img
                         src={session.user.image}
@@ -110,15 +110,16 @@ export function Navbar() {
               </Button>
             )}
 
-            {/* Mobile menu button */}
+            {/* Mobile menu button - 44px touch target */}
             <button
-              className="rounded-lg p-2 md:hidden hover:bg-surface-tertiary"
+              className="flex h-11 w-11 items-center justify-center rounded-lg md:hidden hover:bg-surface-tertiary active:bg-surface-secondary touch-manipulation"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
             >
               {mobileMenuOpen ? (
-                <X className="h-5 w-5" />
+                <X className="h-6 w-6" />
               ) : (
-                <Menu className="h-5 w-5" />
+                <Menu className="h-6 w-6" />
               )}
             </button>
           </div>

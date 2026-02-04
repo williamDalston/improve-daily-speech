@@ -134,16 +134,16 @@ export function PlaylistsSection({ initialPlaylists, className }: PlaylistsSecti
         <Card className="border-brand/30 bg-brand/5">
           <CardContent className="p-4">
             <div className="space-y-3">
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {EMOJI_OPTIONS.map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => setSelectedEmoji(emoji)}
                     className={cn(
-                      'h-8 w-8 rounded-lg text-lg transition-all',
+                      'h-10 w-10 sm:h-8 sm:w-8 rounded-lg text-xl sm:text-lg transition-all touch-manipulation',
                       selectedEmoji === emoji
                         ? 'bg-brand text-white scale-110'
-                        : 'hover:bg-surface-secondary'
+                        : 'hover:bg-surface-secondary active:bg-surface-tertiary'
                     )}
                   >
                     {emoji}
@@ -253,24 +253,24 @@ export function PlaylistsSection({ initialPlaylists, className }: PlaylistsSecti
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                      className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity h-10 w-10 sm:h-8 sm:w-8 touch-manipulation"
                     >
-                      <Play className="h-4 w-4" />
+                      <Play className="h-5 w-5 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
                 </CardContent>
               </Link>
 
-              {/* Menu Button */}
+              {/* Menu Button - always visible on mobile */}
               <div className="absolute top-2 right-2">
                 <button
                   onClick={(e) => {
                     e.preventDefault();
                     setShowMenu(showMenu === playlist.id ? null : playlist.id);
                   }}
-                  className="rounded-lg p-1.5 opacity-0 group-hover:opacity-100 hover:bg-surface-secondary transition-all"
+                  className="rounded-lg p-2 sm:p-1.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-surface-secondary active:bg-surface-tertiary transition-all touch-manipulation"
                 >
-                  <MoreVertical className="h-4 w-4 text-text-muted" />
+                  <MoreVertical className="h-5 w-5 sm:h-4 sm:w-4 text-text-muted" />
                 </button>
 
                 {showMenu === playlist.id && (

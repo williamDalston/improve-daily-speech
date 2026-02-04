@@ -73,14 +73,15 @@ export default async function LibraryPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4">
+      {/* Header - stack on mobile, row on desktop */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-display-sm text-text-primary">Your Library</h1>
-          <p className="text-body-md text-text-secondary">
+          <h1 className="text-2xl font-bold text-text-primary sm:text-display-sm">Your Library</h1>
+          <p className="text-sm text-text-secondary sm:text-body-md">
             {episodes.length} episode{episodes.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-4">
           {streakInfo && (
             <StreakBadge
               currentStreak={streakInfo.currentStreak}
@@ -89,9 +90,9 @@ export default async function LibraryPage() {
             />
           )}
           <Link href="/create">
-            <Button>
+            <Button className="h-11 px-4 sm:h-10">
               <Plus className="h-4 w-4" />
-              New Episode
+              <span className="sm:inline">New Episode</span>
             </Button>
           </Link>
         </div>
@@ -130,9 +131,9 @@ export default async function LibraryPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {episodes.map((episode) => (
-            <Link key={episode.id} href={`/episode/${episode.id}`}>
+            <Link key={episode.id} href={`/episode/${episode.id}`} className="block">
               <EpisodeCard episode={episode} />
             </Link>
           ))}
