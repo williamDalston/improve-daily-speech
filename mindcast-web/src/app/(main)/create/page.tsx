@@ -353,6 +353,15 @@ export default function CreatePage() {
     audioUrl: string;
     transcript: string;
   } | null>(null);
+  const [takeaways, setTakeaways] = useState<string | null>(null);
+  const [takeawaysLoading, setTakeawaysLoading] = useState(false);
+  const [takeawaysError, setTakeawaysError] = useState<string | null>(null);
+
+  const instantHostContext = {
+    intent: LEARNING_INTENTS.find(i => i.id === selectedIntent)?.label,
+    level: KNOWLEDGE_LEVELS.find(l => l.id === selectedLevel)?.label,
+    personalContext: personalContext.trim() || undefined,
+  };
 
   // Rotating tip and fact indices
   const [tipIndex, setTipIndex] = useState(0);
@@ -587,6 +596,34 @@ export default function CreatePage() {
     }
   }, [quickHook, previewAudioReady, steps]);
 
+  const fetchTakeaways = useCallback(async (episodeId: string) => {
+    setTakeawaysLoading(true);
+    setTakeawaysError(null);
+    try {
+      const response = await fetch('/api/addon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episodeId, addonType: 'takeaways' }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || 'Failed to generate takeaways');
+      }
+      const data = await response.json();
+      setTakeaways(typeof data?.content === 'string' ? data.content : null);
+    } catch (err) {
+      setTakeawaysError(err instanceof Error ? err.message : 'Failed to generate takeaways');
+      setTakeaways(null);
+    } finally {
+      setTakeawaysLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!result?.id || isGenerating) return;
+    fetchTakeaways(result.id);
+  }, [result?.id, isGenerating, fetchTakeaways]);
+
   // Update steps based on job status
   const updateStepsFromJobStatus = (status: string, progress: number, _currentStep?: string) => {
     const statusToStepIndex: Record<string, number> = {
@@ -711,7 +748,7 @@ export default function CreatePage() {
     introTextPromiseRef.current = fetch('/api/instant-host', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: fullTopic, phase: 'intro' }),
+      body: JSON.stringify({ topic: fullTopic, phase: 'intro', context: instantHostContext }),
     }).then(async r => {
       if (!r.ok) return null;
       const d = await r.json();
@@ -736,6 +773,9 @@ export default function CreatePage() {
     setAutoPlayEpisode(false);
     setError(null);
     setResult(null);
+    setTakeaways(null);
+    setTakeawaysError(null);
+    setTakeawaysLoading(false);
     setPreviewAudioReady(false);
     setQuickHook(null);
     setFootprints([]);
@@ -1386,6 +1426,7 @@ export default function CreatePage() {
                   isGenerating={isGenerating}
                   episodeReady={episodeReady}
                   introTextPromise={introTextPromiseRef.current}
+                  context={instantHostContext}
                   onReadyToPlay={() => {
                     setEpisodeReady(false);
                     setIsGenerating(false);
@@ -1584,6 +1625,37 @@ export default function CreatePage() {
 
           <Card>
             <CardHeader className="pb-2">
+              <CardTitle className="text-base">Key Takeaways</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {takeawaysLoading && (
+                <div className="flex items-center gap-2 text-sm text-text-muted">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating takeaways…
+                </div>
+              )}
+              {!takeawaysLoading && takeawaysError && (
+                <div className="space-y-2 text-sm text-text-muted">
+                  <p>{takeawaysError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fetchTakeaways(episodeResult.id)}
+                  >
+                    Retry takeaways
+                  </Button>
+                </div>
+              )}
+              {!takeawaysLoading && !takeawaysError && takeaways && (
+                <div className="whitespace-pre-wrap text-sm text-text-secondary">
+                  {takeaways}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
               <CardTitle className="text-base">Transcript</CardTitle>
             </CardHeader>
             <CardContent>
@@ -1601,6 +1673,9 @@ export default function CreatePage() {
                 setResult(null);
                 setAutoPlayEpisode(false);
                 setTopic('');
+                setTakeaways(null);
+                setTakeawaysError(null);
+                setTakeawaysLoading(false);
               }}
               className="h-12 flex-1"
             >

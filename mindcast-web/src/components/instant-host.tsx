@@ -91,6 +91,11 @@ interface InstantHostProps {
   episodeReady: boolean;
   onReadyToPlay: () => void;
   introTextPromise?: Promise<{ text: string; audioBlob: Blob | null } | null> | null;
+  context?: {
+    intent?: string;
+    level?: string;
+    personalContext?: string;
+  };
 }
 
 type HostPhase = 'idle' | 'intro' | 'deep_dive' | 'curiosity' | 'almost_ready' | 'asking' | 'listening' | 'responding';
@@ -154,6 +159,7 @@ export function InstantHost({
   episodeReady,
   onReadyToPlay,
   introTextPromise,
+  context,
 }: InstantHostProps) {
   const { isMobile } = useDevice();
   const [phase, setPhase] = useState<HostPhase>('idle');
@@ -716,7 +722,7 @@ export function InstantHost({
           const response = await fetch('/api/instant-host', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ topic, phase: targetPhase }),
+            body: JSON.stringify({ topic, phase: targetPhase, context }),
           });
           if (!response.ok) throw new Error('Failed to generate content');
           const data = await response.json();
@@ -727,7 +733,7 @@ export function InstantHost({
         const response = await fetch('/api/instant-host', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, phase: targetPhase }),
+          body: JSON.stringify({ topic, phase: targetPhase, context }),
         });
         if (!response.ok) throw new Error('Failed to generate content');
         const data = await response.json();

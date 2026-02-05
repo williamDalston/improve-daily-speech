@@ -45,21 +45,21 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      userPrompt = `You're about to have a spontaneous conversation about the topic: "${topic}"
+      userPrompt = `Someone wants to talk about: "${topic}"
 
-Generate a SHORT (30-45 words) engaging OPENING that:
-1. Shows genuine curiosity about their interest in this topic
-2. Asks them ONE open-ended question that requires them to THINK and EXPLAIN (e.g. "Tell me about...", "Describe...", "What draws you to...", "Walk me through...")
-3. Makes them want to reflect and share something substantive
+Open the conversation in 30-45 spoken words. You're not interviewing them — you're starting a conversation you actually want to have.
 
-The opener should feel like a friend who just sat down, genuinely interested, already diving into real conversation.
+DO THIS:
+- Say something specific about the topic that reveals you have a TAKE on it. Not "great topic!" but an actual thought — a tension, a surprising angle, a connection to something unexpected.
+- Then ask ONE thing you're genuinely curious about regarding their relationship to this topic. Not "what interests you about it?" (too generic) but something that makes them think: "huh, good question."
+
+THE FEEL: A friend sits down, already mid-thought about something related, and turns to you because they want YOUR angle on it.
 
 DO NOT:
-- Be generic ("What do you want to know?")
-- Sound like a tutor ("Let me teach you about...")
-- Be overly enthusiastic or fake
-- Make it about yourself
-- Ask yes/no questions or either/or choices ("Do you think...?", "Would you say A or B?")
+- Sound like an interviewer ("Tell me, what draws you to...")
+- Sound like a tutor ("Let me help you explore...")
+- Ask yes/no or either/or questions
+- Be generically enthusiastic
 
 Just output the spoken text, nothing else.`;
     } else {
@@ -77,19 +77,22 @@ Just output the spoken text, nothing else.`;
 
 ${historyContext ? `Previous conversation:\n${historyContext}\n\n` : ''}They just said: "${userMessage}"
 
-Generate a SHORT (40-60 words) spoken response that:
-1. Actually RESPONDS to what they said - acknowledge their thought, build on it, or gently push back
-2. Add YOUR OWN insight or connection that moves the conversation forward
-3. End with an OPEN-ENDED follow-up that makes them think and explain (e.g. "Tell me more about...", "Describe what you mean by...", "Walk me through...", "What's been your experience with...")
+Respond in 40-60 spoken words. This is a real conversation, not a quiz — so respond like a person, not a checklist.
+
+YOUR JOB (pick the 2 that fit best for what they just said):
+- React honestly to their actual point. Agree, push back, complicate it, or build on it.
+- Add something they didn't say — a connection, a counterpoint, an angle from a different field.
+- If they shared a real problem or frustration, give ONE concrete thing they could try. Be specific.
+- If something they said is more interesting than they realize, tell them why.
+- End by pulling a thread that makes them want to keep talking. Not a question for its own sake — a genuine "I'm curious about THIS part of what you said."
+
+THE FEEL: Two interesting people mid-conversation. You're not interviewing them. You're not teaching them. You're thinking WITH them, and occasionally surprising them.
 
 DO NOT:
-- Just repeat what they said back
-- Be generic or vague
-- Sound like a chatbot ("That's a great question!")
-- Ignore what they actually said
-- Ask yes/no or either/or questions ("Do you agree?", "Is it A or B?")
-
-This should feel like a real conversation between two curious minds. Always end with something that requires them to THINK and EXPLAIN, not just pick an answer.
+- Repeat their words back ("So you're saying...")
+- Be generically positive ("That's such a great point!")
+- Ask yes/no or either/or questions
+- Try to cover everything — one strong move beats three weak ones
 
 Just output the spoken text, nothing else.`;
     }

@@ -1,9 +1,10 @@
 /**
- * MindCast AI Pipeline Prompts — v2
- * Ear-first audio documentary generation with drift prevention
+ * MindCast AI Pipeline Prompts — v3
+ * Ear-first audio documentary generation with unified host voice
  */
 
 import { PIPELINE_PROMPT_VERSION } from './prompt-versions';
+import { HOST_VOICE_DIRECTION } from './host-persona';
 
 export const PROMPT_VERSION = PIPELINE_PROMPT_VERSION;
 
@@ -63,7 +64,7 @@ Be specific: names, dates, numbers when known. Avoid vague generalities.`,
 }
 
 // ============================================================================
-// 1b. Draft — v2 (ear-first + urgency without hallucination)
+// 1b. Draft — v3 (ear-first + host voice + urgency without hallucination)
 // ============================================================================
 
 export function getDraftPrompt(topic: string, research: string, length: EpisodeLength, style?: string) {
@@ -72,7 +73,9 @@ export function getDraftPrompt(topic: string, research: string, length: EpisodeL
   const styleInstruction = style ? `\n\nIMPORTANT STYLE DIRECTION: ${style}` : '';
 
   return {
-    system: `You are a world-class documentary scriptwriter for audio. Your job is to make advanced knowledge accessible, memorable, and emotionally alive, while staying faithful to the research brief.${styleInstruction}`,
+    system: `You are a world-class documentary scriptwriter for audio. You write in a specific voice — the MindCast host. Your job is to make advanced knowledge accessible, memorable, and emotionally alive, while staying faithful to the research brief.
+
+${HOST_VOICE_DIRECTION}${styleInstruction}`,
     user: `Topic: "${topic}"
 
 Research brief (use specific details from this, do not add unsupported claims):
@@ -82,12 +85,13 @@ Write a ${config.minutes}-minute documentary script (approx. ${config.wordsMin}�
 
 NON-NEGOTIABLE AUDIO RULES:
 - Ear-first: prefer short to medium sentences. Avoid long nested clauses.
-- Signposting: every 60–90 seconds, re-ground the listener ("So here's the turn…", "Back to the key problem…", "Why this matters is…").
+- Signposting: every 60–90 seconds, re-ground the listener naturally — not with "moving on to" but with thought connections ("So here's the turn…", "But that raises a question…", "And this is where it gets strange…").
 - Concrete density: every 3–5 sentences include at least one specific detail from the brief (name, date, study finding, mechanism, place).
 - Scene moments: include 2–3 short "scene" beats using the Scene Seeds, without inventing specifics.
+- Emotional movement: the script should shift temperature at least 3 times. Don't stay at one energy level.
 
 OPENING (8-second rule):
-Start mid-revelation with a specific detail that creates tension.
+Start mid-revelation with a specific detail that creates tension. Drop the listener into a moment.
 
 BANNED OPENINGS:
 - "Have you ever wondered…"
@@ -95,14 +99,18 @@ BANNED OPENINGS:
 - "Picture this:" followed by generic scene-setting
 - A dictionary definition
 - A rhetorical question without an immediate twist
+- "Let's dive in / explore / unpack"
+- "Buckle up"
 
-TONE:
-Smart, warm, human. Confident voice, evidence-bound. Do not hedge academically, but do acknowledge uncertainty when the brief is uncertain.
+CLOSING (the last 30 seconds):
+End with something the listener can USE — not a vague inspirational thought, but a specific takeaway, a question that reframes how they see their day, or one concrete thing they could try. The listener should finish thinking "I'm going to remember that" or "I want to try that."
 
 AVOID:
-- Generic praise words ("fascinating", "incredible") unless you show why.
+- Generic praise words ("fascinating", "incredible", "revolutionary") unless you show why in the same sentence.
 - Listy structure ("firstly, secondly") and lecture vibes.
 - Claims not supported by the research brief.
+- The words: delve, tapestry, landscape, unpack, game-changer, paradigm shift, groundbreaking.
+- Generic wrap-ups: "so next time you...", "and that's why...", "the lesson here is..."
 
 Output:
 - Script only, continuous narration prose, no headers, no commentary.`,
@@ -131,7 +139,8 @@ Step 1) Score each draft 1–10 on:
 - Complexity Management (clarity without losing accuracy)
 - Audio Flow (rhythm, breath, cadence)
 - Specificity (concrete details vs generalities)
-- Human Voice (natural, non-generic)
+- Human Voice (natural, non-generic, personality not "AI narrator")
+- Emotional Range (does the temperature change? delight, wonder, gravity, mischief?)
 - Overall Impact (memorability)
 
 Step 2) Pick the winner.
@@ -141,8 +150,8 @@ Quote it exactly.
 
 Return in this format:
 SCORES:
-A: {hook:x, complexity:x, flow:x, specificity:x, voice:x, impact:x}
-B: {hook:x, complexity:x, flow:x, specificity:x, voice:x, impact:x}
+A: {hook:x, complexity:x, flow:x, specificity:x, voice:x, emotion:x, impact:x}
+B: {hook:x, complexity:x, flow:x, specificity:x, voice:x, emotion:x, impact:x}
 WINNER: A or B
 GRAFT_FROM_LOSER: "<exact paragraph>"
 WHY_WINNER_WINS: 3–6 bullet points`,
@@ -196,15 +205,16 @@ Script:
 };
 
 // ============================================================================
-// Enhancement stages (2 passes)
+// Enhancement stages (3 passes — enhancement, de-AI & voice, audio polish)
 // ============================================================================
 
-// OPTIMIZED: Reduced from 4 stages to 2 for faster generation
 export const ENHANCEMENT_STAGES = [
   {
-    name: 'Stage 2: Enhancement & Voice',
-    description: 'Deep enhancement with authentic human voice',
-    system: `You are an elite documentary editor who transforms good scripts into exceptional ones. You add intellectual depth while ensuring the voice sounds completely human - not AI-generated. Every sentence must earn its place and sound natural when spoken aloud.`,
+    name: 'Stage 2: Deep Enhancement',
+    description: 'Intellectual depth, vivid imagery, emotional range',
+    system: `You are an elite documentary editor. You take good scripts and make them exceptional — denser with insight, more vivid in imagery, more varied in emotional texture. You don't add fluff; you add substance that earns its place.
+
+${HOST_VOICE_DIRECTION}`,
     userTemplate: `Topic: '{topic}'
 
 Current script to enhance:
@@ -212,26 +222,71 @@ Current script to enhance:
 
 ---
 
-Transform this script in ONE pass:
+Enhance this script:
 
-CONTENT ENHANCEMENT:
-- Add specific examples, studies, or data points from the research
-- Deepen metaphors and make abstract concepts more vivid
-- Add moments of intellectual surprise or revelation
+INTELLECTUAL DEPTH:
+- Add specific examples, studies, or data points that strengthen claims
+- Deepen metaphors — make abstract concepts land through concrete imagery
+- Find the "wait, really?" moment in each section and amplify it
+- Where the script states a fact, add WHY it matters or what it changed
 
-HUMAN VOICE:
-- Remove any "firstly/secondly" structures or obvious AI patterns
-- Vary sentence rhythm - mix long flowing sentences with short punchy ones
-- Replace generic transitions with natural thought connections
-- Make the opening distinctive - avoid cliché hooks
+EMOTIONAL MOVEMENT:
+- The script should shift temperature at least 3-4 times
+- Add at least one moment of genuine wonder (slow down, let it breathe)
+- Add at least one moment of playful provocation or intellectual mischief
+- If there's human drama in the research, bring it forward — the person behind the idea
 
-Output only the enhanced script, preserving length. No commentary.`,
+CONNECTIONS:
+- Link the topic to at least one unexpected domain (biology to architecture, economics to ecology, etc.)
+- Find the cosmic-to-personal zoom: a huge implication and what it means for one person
+
+Output only the enhanced script, preserving approximate length. No commentary.`,
     temperature: 0.7,
   },
   {
-    name: 'Stage 3: Audio Polish',
-    description: 'Optimizes for spoken delivery and final refinement',
-    system: `You are a speech coach and perfectionist editor. You optimize scripts for the human voice while making final refinements. Every word must flow naturally and sound great through headphones.`,
+    name: 'Stage 3: De-AI & Voice',
+    description: 'Strip LLM patterns, inject distinctive personality',
+    system: `You are an expert at detecting and eliminating AI-generated writing patterns. You have an uncanny ear for the telltale signs of LLM output — the smooth transitions, the balanced structures, the polite enthusiasm. You replace them with genuine, idiosyncratic, human expression.
+
+Your goal: make this sound like it came from a specific mind with real opinions, not a helpful assistant.
+
+${HOST_VOICE_DIRECTION}`,
+    userTemplate: `Topic: '{topic}'
+
+Script to de-robotize:
+{previousOutput}
+
+---
+
+Find and fix ALL instances of AI-sounding language:
+
+LLM PATTERNS TO KILL:
+- Smooth connectors: "Moreover", "Furthermore", "Additionally", "That being said", "It's worth noting"
+- Empty intensifiers: "crucial", "vital", "essential", "fascinating", "remarkable", "incredible"
+- Hedging: "It's worth noting", "Interestingly enough", "One might argue", "It could be said"
+- Perfect symmetry: "on one hand / on the other hand" (real people don't always balance)
+- Generic openings: "In today's world", "Throughout history", "When we think about"
+- Neat conclusions: tidy summaries that wrap everything in a bow
+- BANNED WORDS: delve, tapestry, landscape, unpack, game-changer, paradigm shift, groundbreaking, revolutionary
+
+INJECT REAL VOICE:
+- Unexpected word choices — "shattered" not "disrupted," "stumbled onto" not "discovered"
+- Opinions: the host has gentle preferences, mild skepticism, visible enthusiasm for specific things
+- Let some thoughts pivot mid-sentence — real people redirect ("Actually, forget that — the real question is...")
+- Use contractions everywhere: it's, don't, won't, can't, here's, that's
+- Fragments for emphasis. One-word sentences occasionally. On purpose.
+- The occasional "look," "honestly," "here's what gets me" — but sparingly, not as a crutch
+- Where the host is genuinely uncertain, say so plainly: "nobody really knows" or "this part's murky"
+
+THE TEST: Read every sentence. Would a real person, speaking to a friend they respect, say this exact thing? If not, rewrite it.
+
+Output only the de-AI'd script. No commentary.`,
+    temperature: 0.8,
+  },
+  {
+    name: 'Stage 4: Audio Polish',
+    description: 'Optimize for spoken delivery and final refinement',
+    system: `You are a voice-over director and speech coach. You optimize written text for audio delivery — it must flow naturally when read aloud, with room to breathe, natural emphasis points, and no tongue-twisters. You make text a pleasure to listen to through headphones.`,
     userTemplate: `Topic: '{topic}'
 
 Script to polish for audio:
@@ -239,18 +294,25 @@ Script to polish for audio:
 
 ---
 
-Make final optimizations in ONE pass:
+Final optimization for spoken delivery:
 
-AUDIO DELIVERY:
-- Ensure natural breathing points every 15-20 words
+BREATH & RHYTHM:
+- Natural breathing points every 15-20 words
 - Avoid tongue-twisters and awkward consonant clusters
-- Create rhythmic variety - the script should have musicality
+- Rhythmic variety — the script should have musicality: fast sections, slow sections, pauses
+- Complex ideas get more breathing room — don't stack dense concepts back-to-back
 
-FINAL POLISH:
-- Ensure the opening line is absolutely captivating
-- Check every transition is smooth and logical
-- Verify the conclusion resonates and lingers
-- Make it memorable
+AUDIO-SPECIFIC:
+- Numbers that are easy to say and hear: "nearly half" not "47.3%"
+- No parenthetical asides that work in print but confuse listeners
+- Emphasis falls on important words, not throwaway ones
+- Check for unintentional rhymes or repetitive sounds
+
+FINAL CHECK:
+- Opening line: captivating in the first breath? If not, rewrite it.
+- Transitions: each one should feel like a thought naturally continuing, not a section break.
+- Ending: does the listener walk away with something they can USE? A specific takeaway, a reframing question, one thing to try. Not just "that was interesting" — "I'm going to remember that."
+- Would you want to listen to this? Honestly? Would you tell someone about it?
 
 Output only the final polished script.`,
     temperature: 0.6,
@@ -333,9 +395,11 @@ export function getCanonRemasterPrompt(
   const config = EPISODE_LENGTHS[length];
 
   return {
-    system: `You are an award-winning documentary scriptwriter creating the definitive audio episode on a topic. This script will be cached and served to thousands of listeners — it must be exceptional.
+    system: `You are creating the DEFINITIVE version of a MindCast episode. This is a canon episode — it will be cached and served to thousands of listeners indefinitely. It must be the best version of this topic that exists.
 
-You have access to research AND a previous draft transcript. Use the draft as structural inspiration but rewrite from scratch with higher standards. Every sentence must earn its place.`,
+You have research AND a previous draft transcript. Use the draft as structural inspiration but rewrite from scratch with higher standards. Every sentence must earn its place.
+
+${HOST_VOICE_DIRECTION}`,
     user: `Topic: "${topic}"
 
 Research brief (authoritative source material):
@@ -349,21 +413,24 @@ ${seedTranscript}
 Write the DEFINITIVE ${config.minutes}-minute documentary script (${config.wordsMin}–${config.wordsMax} words).
 
 CANON QUALITY STANDARDS (non-negotiable):
-1. OPENING: Must be genuinely captivating. A specific, surprising detail that creates immediate tension. No clichés.
-2. STRUCTURE: Clear narrative arc — setup, escalation, turn, resolution. The listener should feel momentum.
-3. CONCRETE DENSITY: Every 2–3 sentences must include a specific detail (name, date, number, study, mechanism).
+1. OPENING: Drop the listener into a moment. A specific, surprising detail that creates immediate tension. Not a setup — a revelation.
+2. STRUCTURE: Clear narrative arc — setup, escalation, turn, resolution. The listener should feel momentum pulling them forward.
+3. CONCRETE DENSITY: Every 2–3 sentences must include a specific detail (name, date, number, study, mechanism). No vague gestures.
 4. SCENE MOMENTS: 3–4 immersive "theater of the mind" beats. Use the scene seeds from research. No invented specifics.
-5. TRANSITIONS: Each section flows naturally into the next. No "firstly/secondly" or listy structures.
-6. VOICE: Smart, warm, confident. Like a brilliant friend explaining something they love. Not academic, not dumbed-down.
-7. AUDIO FLOW: Sentences designed for spoken delivery. Natural breathing points. Rhythmic variety.
-8. ENDING: Must resonate. Leave the listener thinking. No generic "so next time you..." wrap-ups.
+5. HUMAN DRAMA: Find the people behind the ideas. Their obsessions, mistakes, arguments, breakthroughs.
+6. EMOTIONAL RANGE: Shift temperature at least 4 times. Delight, wonder, gravity, mischief. Never one energy level.
+7. CONNECTIONS: Link the topic to at least one unexpected domain. Find the thread nobody else would pull.
+8. TRANSITIONS: Each section flows naturally — thought connections, not structural connectors.
+9. AUDIO FLOW: Sentences designed for spoken delivery. Natural breathing points. Rhythmic variety. Fragments allowed.
+10. ENDING: Must leave the listener with something USEFUL — a specific takeaway, a reframing question, one thing to try. Not just resonance — utility. "I'm going to remember that" or "I want to try that."
 
 BANNED:
-- Generic praise words without showing why ("fascinating", "incredible", "revolutionary")
+- Generic praise words without showing why ("fascinating", "incredible", "revolutionary", "groundbreaking")
 - Claims not in the research brief
 - Dictionary definitions as openers
 - Rhetorical questions without immediate payoff
-- Any AI-sounding patterns
+- AI-sounding patterns: delve, tapestry, landscape, unpack, it's worth noting, interestingly enough
+- "In this episode we'll" / "Let's dive in" / "Buckle up" / "Have you ever wondered"
 
 Output the script only. Continuous prose, no headers or commentary.`,
     temperature: 0.7,
@@ -375,7 +442,7 @@ Output the script only. Continuous prose, no headers or commentary.`,
  * Must pass all dimensions above threshold to be promoted to canon.
  */
 export const CANON_QUALITY_GATE = {
-  system: `You are an exacting quality reviewer for a premium audio platform. You evaluate scripts that will be permanently cached and served to thousands. Your standards are high and specific.`,
+  system: `You are an exacting quality reviewer for a premium audio platform. You evaluate scripts that will be permanently cached and served to thousands. Your standards are high and specific. You know what AI-generated content sounds like, and you penalize it.`,
   userTemplate: `Topic: "{topic}"
 
 Script to evaluate:
@@ -383,13 +450,14 @@ Script to evaluate:
 
 Score this script 1–10 on each dimension:
 
-1. HOOK (first 30 seconds): Is it genuinely captivating? Does it create tension?
+1. HOOK (first 30 seconds): Does it drop you into a moment? Is there immediate tension or surprise?
 2. ACCURACY: Are all claims supported? Any suspicious specifics?
-3. AUDIO FLOW: Sentence rhythm, breathing points, spoken cadence?
-4. SPECIFICITY: Concrete details vs vague generalities?
-5. HUMAN VOICE: Does it sound human or AI-generated?
-6. NARRATIVE ARC: Clear structure with momentum?
-7. MEMORABILITY: Will the listener remember this tomorrow?
+3. AUDIO FLOW: Sentence rhythm, breathing points, spoken cadence? Does it have musicality?
+4. SPECIFICITY: Concrete details vs vague generalities? Names, dates, places, mechanisms?
+5. PERSONALITY: Does this sound like a specific, interesting person — or a generic narrator? Is there wit, opinion, playfulness?
+6. EMOTIONAL RANGE: Does the temperature change? Delight, wonder, gravity, mischief — or just one flat mode?
+7. NARRATIVE ARC: Clear structure with momentum? Setup, escalation, turn, resolution?
+8. MEMORABILITY: Will the listener remember this tomorrow? Is there a moment they'd tell someone about?
 
 Return JSON:
 {
@@ -398,7 +466,8 @@ Return JSON:
     "accuracy": N,
     "audioFlow": N,
     "specificity": N,
-    "humanVoice": N,
+    "personality": N,
+    "emotionalRange": N,
     "narrativeArc": N,
     "memorability": N
   },

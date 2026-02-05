@@ -112,21 +112,53 @@ async function callLLM({
 
   // Anthropic
   const client = getAnthropicClient();
-  const message = await withRetry(
-    () =>
-      withTimeout(
-        client.messages.create({
-          model: resolvedModel,
-          max_tokens: resolvedMaxTokens,
-          temperature,
-          system,
-          messages: [{ role: 'user', content: user }],
-        }),
-        45000,
-        'anthropic-chat'
-      ),
-    { retries: 2, shouldRetry: isRetryableError, label: 'anthropic-chat' }
-  );
+  const isTimeoutError = (error: unknown) =>
+    error instanceof Error && error.message.includes('timed out');
+
+  let message;
+  try {
+    message = await withRetry(
+      () =>
+        withTimeout(
+          client.messages.create({
+            model: resolvedModel,
+            max_tokens: resolvedMaxTokens,
+            temperature,
+            system,
+            messages: [{ role: 'user', content: user }],
+          }),
+          60000,
+          'anthropic-chat'
+        ),
+      { retries: 2, shouldRetry: isRetryableError, label: 'anthropic-chat' }
+    );
+  } catch (error) {
+    if (isTimeoutError(error)) {
+      console.warn('Anthropic timed out, falling back to OpenAI', {
+        purpose,
+        promptVersion,
+      });
+      const openaiResponse = await withRetry(
+        () =>
+          withTimeout(
+            getOpenAIClient().chat.completions.create({
+              model: DEFAULT_OPENAI_MODEL,
+              max_tokens: resolvedMaxTokens,
+              temperature,
+              messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: user },
+              ],
+            }),
+            45000,
+            'openai-chat-fallback'
+          ),
+        { retries: 2, shouldRetry: isRetryableError, label: 'openai-chat-fallback' }
+      );
+      return openaiResponse.choices[0]?.message?.content || '';
+    }
+    throw error;
+  }
 
   const content = message.content[0];
   if (content.type === 'text') {
@@ -338,7 +370,7 @@ export async function* runFullPipeline(
 
   let currentText = judgeResult.winnerText;
 
-  // OPTIMIZED: Only 2 enhancement stages (down from 4), no separate critique step
+  // 3 enhancement stages: deep enhancement, de-AI & voice, audio polish
   for (let i = 0; i < ENHANCEMENT_STAGES.length; i++) {
     const stage = ENHANCEMENT_STAGES[i];
 

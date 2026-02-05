@@ -4,7 +4,7 @@ import { withRetry, withTimeout } from '@/lib/async-utils';
 import { isRetryableError } from '@/lib/ai/retry';
 import { SimpleCache } from '@/lib/simple-cache';
 import { INSTANT_HOST_PROMPT_VERSION } from '@/lib/ai/prompt-versions';
-import { sanitizeTopic } from '@/lib/sanitize';
+import { sanitizeInput, sanitizeTopic } from '@/lib/sanitize';
 import { INSTANT_HOST_PERSONA } from '@/lib/ai/host-persona';
 
 const anthropic = new Anthropic();
@@ -13,7 +13,7 @@ const cache = new SimpleCache<{ text: string; phase: string }>(5 * 60 * 1000);
 // POST /api/instant-host - Generate instant topic-specific content while full episode generates
 export async function POST(request: NextRequest) {
   try {
-    const { topic: rawTopic, phase } = await request.json();
+    const { topic: rawTopic, phase, context: rawContext } = await request.json();
 
     if (!rawTopic || typeof rawTopic !== 'string') {
       return NextResponse.json({ error: 'Topic is required' }, { status: 400 });
@@ -29,22 +29,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid phase' }, { status: 400 });
     }
 
+    const context = rawContext && typeof rawContext === 'object' ? rawContext : {};
+    const intent =
+      typeof context.intent === 'string'
+        ? sanitizeInput(context.intent, { maxLength: 120, allowNewlines: false })
+        : '';
+    const level =
+      typeof context.level === 'string'
+        ? sanitizeInput(context.level, { maxLength: 120, allowNewlines: false })
+        : '';
+    const personalContext =
+      typeof context.personalContext === 'string'
+        ? sanitizeInput(context.personalContext, { maxLength: 320, allowNewlines: false })
+        : '';
+    const hasContext = Boolean(intent || level || personalContext);
+
     const cacheKey = `${phase}:${topic.toLowerCase().trim()}`;
-    const cached = cache.get(cacheKey);
-    if (cached) {
-      return NextResponse.json(cached, {
-        headers: {
-          'X-Prompt-Version': INSTANT_HOST_PROMPT_VERSION,
-          'X-Cache': 'HIT',
-        },
-      });
+    if (!hasContext) {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            'X-Prompt-Version': INSTANT_HOST_PROMPT_VERSION,
+            'X-Cache': 'HIT',
+          },
+        });
+      }
     }
+
+    const contextBlock = hasContext
+      ? `Context from the listener:
+- Intent: ${intent || 'unspecified'}
+- Level: ${level || 'unspecified'}
+- Personal context: ${personalContext || 'none'}
+
+Use the context to personalize examples, angle, and tone. Keep it natural and spoken.
+
+`
+      : '';
 
     // Phase-specific user messages — persona is in system message
     let userPrompt: string;
 
     if (phase === 'intro') {
-      userPrompt = `Someone just asked you to explore "${topic}" with them. Generate a SHORT (40-50 words) spoken opening that:
+      userPrompt = `${contextBlock}Someone just asked you to explore "${topic}" with them. Generate a SHORT (40-50 words) spoken opening that:
 
 1. Acknowledge the topic with genuine intellectual interest—not just "great choice!" but WHY it's fascinating
 2. Make ONE unexpected observation or connection that shows depth of thought
@@ -54,7 +82,7 @@ Sound like someone who's genuinely intellectually excited, not generically enthu
 
 Just output the spoken text, nothing else.`;
     } else if (phase === 'deep_dive') {
-      userPrompt = `You're researching "${topic}" and just discovered something interesting. Generate a SHORT (45-55 words) spoken segment that:
+      userPrompt = `${contextBlock}You're researching "${topic}" and just discovered something interesting. Generate a SHORT (45-55 words) spoken segment that:
 
 1. Share a genuine insight or observation you're having about the topic—something non-obvious
 2. Connect it to a broader idea, another field, or human experience
@@ -64,7 +92,7 @@ Think out loud. Wonder genuinely. Sound like you're discovering alongside them.
 
 Just output the spoken text, nothing else.`;
     } else if (phase === 'curiosity') {
-      userPrompt = `You're deep into researching "${topic}". Generate a SHORT (40-50 words) spoken segment that does ONE of these (pick the most interesting):
+      userPrompt = `${contextBlock}You're deep into researching "${topic}". Generate a SHORT (40-50 words) spoken segment that does ONE of these (pick the most interesting):
 
 - Share a surprising connection between the topic and an unrelated field (philosophy, biology, history, art)
 - Mention a counterintuitive finding that challenges common assumptions
@@ -76,7 +104,7 @@ Sound like someone whose mind is actively working, making connections. Natural p
 Just output the spoken text, nothing else.`;
     } else {
       // almost_ready
-      userPrompt = `You've just finished creating something in-depth about "${topic}" and you're genuinely excited to share it. Generate a SHORT (35-45 words) spoken transition that:
+      userPrompt = `${contextBlock}You've just finished creating something in-depth about "${topic}" and you're genuinely excited to share it. Generate a SHORT (35-45 words) spoken transition that:
 
 1. Express authentic intellectual excitement—what specifically fascinates you about what you found
 2. Tease ONE specific insight or angle they won't expect
@@ -94,6 +122,7 @@ Just output the spoken text, nothing else.`;
       temperature,
       promptVersion: INSTANT_HOST_PROMPT_VERSION,
       phase,
+      hasContext,
     });
 
     const message = await withRetry(
@@ -115,7 +144,9 @@ Just output the spoken text, nothing else.`;
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
 
     const payload = { text, phase };
-    cache.set(cacheKey, payload);
+    if (!hasContext) {
+      cache.set(cacheKey, payload);
+    }
 
     return NextResponse.json(payload, {
       headers: {
