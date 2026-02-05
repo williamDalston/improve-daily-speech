@@ -6,6 +6,7 @@ import { incrementFreeUsage } from '@/lib/stripe';
 import { parseSourcesFromResearch, type Source } from '@/lib/ai/sources';
 import { updateStreak, XP_REWARDS } from '@/lib/streak';
 import { PROMPT_VERSION } from '@/lib/ai/prompts';
+import { withTimeout } from '@/lib/async-utils';
 import { uploadAudio } from '@/lib/storage';
 
 type JobStatus = 'PENDING' | 'RESEARCH' | 'DRAFTING' | 'JUDGING' | 'ENHANCING' | 'AUDIO' | 'COMPLETE' | 'FAILED';
@@ -75,9 +76,11 @@ function mapStepToStatus(stepType: string): JobStatus {
     case 'drafts':
       return 'DRAFTING';
     case 'judge':
+    case 'support-check':
       return 'JUDGING';
     case 'enhancement':
     case 'critique':
+    case 'pronunciation':
       return 'ENHANCING';
     case 'audio':
       return 'AUDIO';
@@ -106,8 +109,10 @@ function calculateProgress(stepType: string, stepStatus: string, stageIndex?: nu
   const stepWeights: Record<string, number> = {
     research: 15,
     drafts: 35,
-    judge: 45,
-    enhancement: 60, // Base for first enhancement
+    judge: 42,
+    'support-check': 48,
+    enhancement: 55, // Base for first enhancement
+    pronunciation: 80,
     audio: 90,
     done: 100,
   };
@@ -157,9 +162,8 @@ export async function processJob(
     const effectiveVoice = (job.voice as OpenAIVoice) || voice;
     const isQuickMode = mode === 'quick';
     const isMobile = deviceType === 'mobile';
-    // Mobile always uses fast TTS for quicker time-to-first-sound
-    // Desktop uses high-quality TTS unless in quick mode
-    const useFastTTS = isMobile || isQuickMode;
+    // Fastest win: use fast TTS for full audio to reduce latency
+    const useFastTTS = true;
 
     // Start processing
     await updateJobStatus(jobId, 'RESEARCH', 5, 'Starting...', { startedAt: new Date() });
@@ -282,6 +286,17 @@ export async function processJob(
         }
       }
 
+      if (step.type === 'support-check' && step.status === 'running') {
+        await addFootprint(jobId, 'Fact Check', 'Verifying script stays faithful to research...');
+      }
+
+      if (step.type === 'support-check' && step.status === 'done') {
+        const ok = 'ok' in step ? step.ok : true;
+        await addFootprint(jobId, 'Fact Check Done', ok
+          ? 'Script verified — all claims supported by research'
+          : 'Found some drift — enhancement stage will address it');
+      }
+
       if (step.type === 'enhancement' && step.status === 'running') {
         const stageName = step.stageName || 'Enhancing';
         await addFootprint(jobId, stageName, getEnhancementFootprint(step.stageName || ''));
@@ -293,6 +308,10 @@ export async function processJob(
           where: { id: jobId },
           data: { enhanced: step.enhancedText || '' },
         });
+      }
+
+      if (step.type === 'pronunciation' && step.status === 'done') {
+        await addFootprint(jobId, 'Pronunciation', 'Extracted pronunciation guide for TTS');
       }
 
       if (step.type === 'done') {
@@ -340,11 +359,27 @@ export async function processJob(
       : 'Generating complete high-quality audio...');
     // Desktop uses parallel chunk processing for faster generation
     // Mobile uses sequential for lower memory usage
+    let lastProgressUpdate = 0;
+    let lastProgressValue = 0;
     const audioBuffer = await generateAudio(finalText, {
       fastMode: useFastTTS,
       voice: effectiveVoice,
       parallelChunks: !isMobile, // Parallel for desktop, sequential for mobile
+      onProgress: (completed, total) => {
+        if (!total) return;
+        const ratio = Math.min(1, completed / total);
+        const progressValue = Math.max(92, Math.min(95, 92 + Math.floor(ratio * 3)));
+        const now = Date.now();
+        if (progressValue !== lastProgressValue || now - lastProgressUpdate > 1500) {
+          lastProgressValue = progressValue;
+          lastProgressUpdate = now;
+          updateJobStatus(jobId, 'AUDIO', progressValue, 'Generating full audio...').catch(() => {
+            // Non-blocking progress update
+          });
+        }
+      },
     });
+    await updateJobStatus(jobId, 'AUDIO', 95, 'Finalizing audio...');
     const audioBase64 = audioBuffer.toString('base64');
     const audioDuration = estimateAudioDuration(finalText);
     await addFootprint(jobId, 'Episode Complete', `Your ${Math.round(audioDuration / 60)}-minute episode is ready!`);
@@ -366,7 +401,18 @@ export async function processJob(
     });
 
     // 5b. Upload audio to blob storage (Vercel Blob / R2)
-    const audioUrl = await uploadAudio(audioBuffer, `episodes/${episode.id}.mp3`);
+    await updateJobStatus(jobId, 'AUDIO', 98, 'Uploading audio...');
+    let audioUrl: string | null = null;
+    try {
+      audioUrl = await withTimeout(
+        uploadAudio(audioBuffer, `episodes/${episode.id}.mp3`),
+        20000,
+        'audio-upload'
+      );
+    } catch (error) {
+      console.warn('[Storage] Upload timed out, falling back to base64:', error);
+      audioUrl = null;
+    }
     if (audioUrl) {
       await db.episode.update({
         where: { id: episode.id },

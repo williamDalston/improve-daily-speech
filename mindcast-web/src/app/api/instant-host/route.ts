@@ -58,7 +58,7 @@ Just output the spoken text, nothing else.`;
 
 1. Share a genuine insight or observation you're having about the topic—something non-obvious
 2. Connect it to a broader idea, another field, or human experience
-3. Ask ONE genuinely thought-provoking question (not rhetorical) that invites reflection
+3. Ask ONE open-ended question that makes them think and explain—use "Tell me...", "Describe...", "What do you think about..." (NEVER yes/no or either/or questions)
 
 Think out loud. Wonder genuinely. Sound like you're discovering alongside them.
 

@@ -5,6 +5,8 @@
  */
 
 import OpenAI from 'openai';
+import { withRetry, withTimeout } from '@/lib/async-utils';
+import { isRetryableError } from '@/lib/ai/retry';
 
 // ============================================================================
 // Types
@@ -70,6 +72,7 @@ export interface GenerateAudioOptions {
   similarityBoost?: number; // ElevenLabs: 0-1, higher = more similar to original
   fastMode?: boolean; // Use tts-1 (faster) instead of tts-1-hd (better quality)
   parallelChunks?: boolean; // Process chunks in parallel (faster but uses more API calls concurrently)
+  onProgress?: (completedChunks: number, totalChunks: number) => void;
 }
 
 // ============================================================================
@@ -83,6 +86,40 @@ function getOpenAIClient(): OpenAI {
     openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   }
   return openaiClient;
+}
+
+const OPENAI_TTS_TIMEOUT_MS = 20000;
+const OPENAI_TTS_MAX_FAILURES = 3;
+const OPENAI_TTS_FAILURE_WINDOW_MS = 60000;
+const OPENAI_TTS_COOLDOWN_MS = 120000;
+
+const openaiTtsBreaker = {
+  failures: 0,
+  lastFailureAt: 0,
+  openUntil: 0,
+};
+
+function isOpenaiTtsBreakerOpen() {
+  return Date.now() < openaiTtsBreaker.openUntil;
+}
+
+function recordOpenaiTtsFailure() {
+  const now = Date.now();
+  if (now - openaiTtsBreaker.lastFailureAt > OPENAI_TTS_FAILURE_WINDOW_MS) {
+    openaiTtsBreaker.failures = 0;
+  }
+  openaiTtsBreaker.failures += 1;
+  openaiTtsBreaker.lastFailureAt = now;
+
+  if (openaiTtsBreaker.failures >= OPENAI_TTS_MAX_FAILURES) {
+    openaiTtsBreaker.openUntil = now + OPENAI_TTS_COOLDOWN_MS;
+  }
+}
+
+function recordOpenaiTtsSuccess() {
+  openaiTtsBreaker.failures = 0;
+  openaiTtsBreaker.lastFailureAt = 0;
+  openaiTtsBreaker.openUntil = 0;
 }
 
 // ============================================================================
@@ -137,25 +174,34 @@ async function generateElevenLabsChunk(
   apiKey: string,
   options: { stability?: number; similarityBoost?: number } = {}
 ): Promise<Buffer> {
-  const response = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+  const response = await withRetry(
+    () =>
+      withTimeout(
+        fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'audio/mpeg',
+            'Content-Type': 'application/json',
+            'xi-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            text,
+            model_id: 'eleven_turbo_v2_5', // Fast, high-quality model
+            voice_settings: {
+              stability: options.stability ?? 0.5,
+              similarity_boost: options.similarityBoost ?? 0.75,
+              style: 0.5, // Expressiveness
+              use_speaker_boost: true,
+            },
+          }),
+        }),
+        20000,
+        'elevenlabs-tts'
+      ),
     {
-      method: 'POST',
-      headers: {
-        'Accept': 'audio/mpeg',
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_turbo_v2_5', // Fast, high-quality model
-        voice_settings: {
-          stability: options.stability ?? 0.5,
-          similarity_boost: options.similarityBoost ?? 0.75,
-          style: 0.5, // Expressiveness
-          use_speaker_boost: true,
-        },
-      }),
+      retries: 2,
+      shouldRetry: isRetryableError,
+      label: 'elevenlabs-tts',
     }
   );
 
@@ -273,7 +319,7 @@ async function generateWithGoogle(
 async function processChunksInParallel<T>(
   items: T[],
   processor: (item: T, index: number) => Promise<Buffer>,
-  concurrency: number = 3
+  concurrency: number = 5
 ): Promise<Buffer[]> {
   const results: Buffer[] = new Array(items.length);
   let currentIndex = 0;
@@ -299,55 +345,106 @@ async function generateWithOpenAI(
   voice: OpenAIVoice = 'onyx',
   speed: number = 1.0,
   fastMode: boolean = false,
-  parallelChunks: boolean = false
+  parallelChunks: boolean = false,
+  onProgress?: (completedChunks: number, totalChunks: number) => void
 ): Promise<Buffer> {
+  if (isOpenaiTtsBreakerOpen()) {
+    throw new Error('OpenAI TTS temporarily unavailable');
+  }
+
   const client = getOpenAIClient();
   const chunks = splitForTTS(text, 4000);
+  const totalChunks = chunks.length;
+  let completedChunks = 0;
+
+  const reportProgress = () => {
+    onProgress?.(completedChunks, totalChunks);
+  };
 
   // tts-1 is faster (2x) but slightly lower quality than tts-1-hd
   const model = fastMode ? 'tts-1' : 'tts-1-hd';
 
   // Single chunk - no need for parallelization
   if (chunks.length === 1) {
-    const response = await client.audio.speech.create({
-      model,
-      voice,
-      input: chunks[0],
-      speed,
-      response_format: 'mp3',
-    });
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer);
+    try {
+      const response = await withRetry(
+        () =>
+          withTimeout(
+            client.audio.speech.create({
+              model,
+              voice,
+              input: chunks[0],
+              speed,
+              response_format: 'mp3',
+            }),
+            OPENAI_TTS_TIMEOUT_MS,
+            'openai-tts'
+          ),
+        {
+          retries: 2,
+          shouldRetry: isRetryableError,
+          label: 'openai-tts',
+        }
+      );
+      const arrayBuffer = await response.arrayBuffer();
+      recordOpenaiTtsSuccess();
+      completedChunks = 1;
+      reportProgress();
+      return Buffer.from(arrayBuffer);
+    } catch (error) {
+      recordOpenaiTtsFailure();
+      throw error;
+    }
   }
 
   // Process chunk helper
   const processChunk = async (chunk: string, index: number): Promise<Buffer> => {
     console.log(`OpenAI TTS: Processing chunk ${index + 1}/${chunks.length} (${chunk.length} chars)`);
-    const response = await client.audio.speech.create({
-      model,
-      voice,
-      input: chunk,
-      speed,
-      response_format: 'mp3',
-    });
+    const response = await withRetry(
+      () =>
+        withTimeout(
+          client.audio.speech.create({
+            model,
+            voice,
+            input: chunk,
+            speed,
+            response_format: 'mp3',
+          }),
+          OPENAI_TTS_TIMEOUT_MS,
+          'openai-tts'
+        ),
+      {
+        retries: 2,
+        shouldRetry: isRetryableError,
+        label: 'openai-tts',
+      }
+    );
     const arrayBuffer = await response.arrayBuffer();
+    completedChunks += 1;
+    reportProgress();
     return Buffer.from(arrayBuffer);
   };
 
   let audioBuffers: Buffer[];
 
-  if (parallelChunks) {
-    // Parallel processing with controlled concurrency (max 3 concurrent)
-    // This significantly speeds up generation for long texts
-    console.log(`OpenAI TTS: Processing ${chunks.length} chunks in parallel (max 3 concurrent)`);
-    audioBuffers = await processChunksInParallel(chunks, processChunk, 3);
-  } else {
-    // Sequential processing (original behavior)
-    audioBuffers = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const buffer = await processChunk(chunks[i], i);
-      audioBuffers.push(buffer);
+  try {
+    if (parallelChunks) {
+      // Parallel processing with controlled concurrency (max 5 concurrent)
+      // This significantly speeds up generation for long texts
+      console.log(`OpenAI TTS: Processing ${chunks.length} chunks in parallel (max 5 concurrent)`);
+      audioBuffers = await processChunksInParallel(chunks, processChunk, 5);
+    } else {
+      // Sequential processing (original behavior)
+      audioBuffers = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const buffer = await processChunk(chunks[i], i);
+        audioBuffers.push(buffer);
+      }
     }
+    recordOpenaiTtsSuccess();
+  } catch (error) {
+    recordOpenaiTtsFailure();
+    throw error;
   }
 
   return Buffer.concat(audioBuffers);
@@ -366,7 +463,14 @@ export async function generateAudio(
   text: string,
   options: GenerateAudioOptions = {}
 ): Promise<Buffer> {
-  const { provider = 'openai', voice, speed = 1.0, fastMode = false, parallelChunks = false } = options;
+  const {
+    provider = 'openai',
+    voice,
+    speed = 1.0,
+    fastMode = false,
+    parallelChunks = false,
+    onProgress,
+  } = options;
 
   // Use OpenAI by default (much cheaper than ElevenLabs)
   if (provider === 'openai' || !process.env.ELEVENLABS_API_KEY) {
@@ -375,7 +479,8 @@ export async function generateAudio(
       (voice as OpenAIVoice) || 'nova', // nova = warm female, similar to rachel
       speed,
       fastMode,
-      parallelChunks // Enable parallel chunk processing for faster generation
+      parallelChunks, // Enable parallel chunk processing for faster generation
+      onProgress
     );
   }
 
@@ -410,7 +515,12 @@ export async function generatePreviewAudio(
 
   // Force OpenAI for previews (fast + cheap)
   // Previews are short enough that parallel processing isn't beneficial
-  return generateAudio(cleanPreview, { ...options, provider: 'openai', parallelChunks: false });
+  return generateAudio(cleanPreview, {
+    ...options,
+    provider: 'openai',
+    fastMode: true,
+    parallelChunks: false,
+  });
 }
 
 /**

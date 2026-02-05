@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
 
 Generate a SHORT (30-45 words) engaging OPENING that:
 1. Shows genuine curiosity about their interest in this topic
-2. Asks them a specific, intriguing question about it
-3. Makes them want to think and respond immediately
+2. Asks them ONE open-ended question that requires them to THINK and EXPLAIN (e.g. "Tell me about...", "Describe...", "What draws you to...", "Walk me through...")
+3. Makes them want to reflect and share something substantive
 
 The opener should feel like a friend who just sat down, genuinely interested, already diving into real conversation.
 
@@ -59,6 +59,7 @@ DO NOT:
 - Sound like a tutor ("Let me teach you about...")
 - Be overly enthusiastic or fake
 - Make it about yourself
+- Ask yes/no questions or either/or choices ("Do you think...?", "Would you say A or B?")
 
 Just output the spoken text, nothing else.`;
     } else {
@@ -79,15 +80,16 @@ ${historyContext ? `Previous conversation:\n${historyContext}\n\n` : ''}They jus
 Generate a SHORT (40-60 words) spoken response that:
 1. Actually RESPONDS to what they said - acknowledge their thought, build on it, or gently push back
 2. Add YOUR OWN insight or connection that moves the conversation forward
-3. End with a follow-up question to keep the dialogue going
+3. End with an OPEN-ENDED follow-up that makes them think and explain (e.g. "Tell me more about...", "Describe what you mean by...", "Walk me through...", "What's been your experience with...")
 
 DO NOT:
 - Just repeat what they said back
 - Be generic or vague
 - Sound like a chatbot ("That's a great question!")
 - Ignore what they actually said
+- Ask yes/no or either/or questions ("Do you agree?", "Is it A or B?")
 
-This should feel like a real conversation between two curious minds. Always end with something that invites their response.
+This should feel like a real conversation between two curious minds. Always end with something that requires them to THINK and EXPLAIN, not just pick an answer.
 
 Just output the spoken text, nothing else.`;
     }

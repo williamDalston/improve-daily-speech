@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { withRetry, withTimeout } from '@/lib/async-utils';
+import { isRetryableError } from '@/lib/ai/retry';
+import { SimpleCache } from '@/lib/simple-cache';
 
 // Voice preview samples - short, engaging phrases that showcase each voice's character
 const VOICE_SAMPLES: Record<string, string> = {
@@ -11,8 +14,8 @@ const VOICE_SAMPLES: Record<string, string> = {
   shimmer: "Oh, this is going to be exciting! There's so much fascinating stuff to discover together!",
 };
 
-// Cache previews in memory to avoid regenerating (they never change)
-const previewCache = new Map<string, Buffer>();
+// Cache previews in memory to avoid regenerating (size-limited)
+const previewCache = new SimpleCache<Buffer>(365 * 24 * 60 * 60 * 1000, 12);
 
 export async function GET(request: NextRequest) {
   const voice = request.nextUrl.searchParams.get('voice');
@@ -38,12 +41,20 @@ export async function GET(request: NextRequest) {
   try {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const response = await openai.audio.speech.create({
-      model: 'tts-1', // Use faster model for previews
-      voice: voice as 'nova' | 'alloy' | 'echo' | 'fable' | 'onyx' | 'shimmer',
-      input: VOICE_SAMPLES[voice],
-      response_format: 'mp3',
-    });
+    const response = await withRetry(
+      () =>
+        withTimeout(
+          openai.audio.speech.create({
+            model: 'tts-1', // Use faster model for previews
+            voice: voice as 'nova' | 'alloy' | 'echo' | 'fable' | 'onyx' | 'shimmer',
+            input: VOICE_SAMPLES[voice],
+            response_format: 'mp3',
+          }),
+          15000,
+          'voice-preview'
+        ),
+      { retries: 2, shouldRetry: isRetryableError, label: 'voice-preview' }
+    );
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);

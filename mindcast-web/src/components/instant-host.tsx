@@ -883,6 +883,8 @@ export function InstantHost({
   useEffect(() => {
     if (isGenerating && !hasStartedRef.current && topic) {
       hasStartedRef.current = true;
+      setIsMuted(false);
+      setIsStopped(false);
       // Single frame for layout paint, then start immediately
       requestAnimationFrame(() => generateAndSpeak('intro'));
     }
@@ -897,6 +899,23 @@ export function InstantHost({
       stopAudioPlayback();
     }
   }, [isGenerating, topic, generateAndSpeak, stopAudioPlayback]);
+
+  // Prewarm TTS once per session to reduce time-to-first-audio
+  useEffect(() => {
+    if (!isGenerating) return;
+    if (typeof window === 'undefined') return;
+    const already = sessionStorage.getItem('mindcast_tts_prewarmed');
+    if (already) return;
+    sessionStorage.setItem('mindcast_tts_prewarmed', '1');
+
+    fetch('/api/instant-host/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'Okay', prewarm: true }),
+    }).catch(() => {
+      // Ignore prewarm failures
+    });
+  }, [isGenerating]);
 
   // When episode is ready, do the transition
   useEffect(() => {
