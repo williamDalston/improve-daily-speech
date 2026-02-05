@@ -8,6 +8,8 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: '10mb', // For audio uploads
     },
+    // Prevent webpack from bundling undici (uses private class fields)
+    serverComponentsExternalPackages: ['undici'],
   },
 
   // Image optimization domains

@@ -1,38 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import { withRetry, withTimeout } from '@/lib/async-utils';
+import { isRetryableError } from '@/lib/ai/retry';
+import { SimpleCache } from '@/lib/simple-cache';
+import { INSTANT_HOST_CONVO_VERSION } from '@/lib/ai/prompt-versions';
+import { sanitizeTopic, sanitizeInput } from '@/lib/sanitize';
+import { INSTANT_HOST_PERSONA } from '@/lib/ai/host-persona';
 
 const anthropic = new Anthropic();
+const starterCache = new SimpleCache<{ text: string }>(5 * 60 * 1000);
 
 export const runtime = 'nodejs';
 
 // POST /api/instant-host/respond - Generate response to user's voice input
 export async function POST(request: NextRequest) {
   try {
-    const { topic, userMessage, conversationHistory } = await request.json();
+    const { topic: rawTopic, userMessage: rawMessage, conversationHistory } = await request.json();
 
-    if (!topic || !userMessage) {
+    if (!rawTopic || !rawMessage) {
       return NextResponse.json({ error: 'Topic and message required' }, { status: 400 });
     }
 
-    // Check if this is a conversation starter request
-    const isConversationStarter = userMessage === '__START_CONVERSATION__';
+    const topic = sanitizeTopic(rawTopic);
+    if (!topic) {
+      return NextResponse.json({ error: 'Invalid topic' }, { status: 400 });
+    }
 
-    let prompt: string;
+    const isConversationStarter = rawMessage === '__START_CONVERSATION__';
+    const userMessage = isConversationStarter
+      ? rawMessage
+      : sanitizeInput(rawMessage, { maxLength: 1000, allowNewlines: false });
+
+    let userPrompt: string;
 
     if (isConversationStarter) {
-      // Generate an engaging opening question to kick off the conversation
-      prompt = `You are a brilliant, curious intellectual who's about to have a spontaneous conversation about "${topic}". You've read widely and make unexpected connections between ideas.
+      const cacheKey = `starter:${topic.toLowerCase().trim()}`;
+      const cached = starterCache.get(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            'X-Prompt-Version': INSTANT_HOST_CONVO_VERSION,
+            'X-Cache': 'HIT',
+          },
+        });
+      }
+
+      userPrompt = `You're about to have a spontaneous conversation about the topic: "${topic}"
 
 Generate a SHORT (30-45 words) engaging OPENING that:
 1. Shows genuine curiosity about their interest in this topic
-2. Asks them a specific, intriguing question about ${topic}
+2. Asks them a specific, intriguing question about it
 3. Makes them want to think and respond immediately
 
-Examples of good openers (but don't copy these exactly):
-- "So ${topic}—what drew you to this? I'm curious if there's a specific angle or question that's been on your mind."
-- "Interesting choice! What's the part of ${topic} that you find most mysterious or counterintuitive?"
-
-The opener should feel like a friend who just sat down with you, genuinely interested, already diving into real conversation.
+The opener should feel like a friend who just sat down, genuinely interested, already diving into real conversation.
 
 DO NOT:
 - Be generic ("What do you want to know?")
@@ -42,20 +62,19 @@ DO NOT:
 
 Just output the spoken text, nothing else.`;
     } else {
-      // Build conversation context for regular responses
-      const historyContext = conversationHistory
-        ?.map((msg: { role: string; text: string }) =>
-          `${msg.role === 'host' ? 'You said' : 'They said'}: "${msg.text}"`
-        )
-        .join('\n') || '';
+      // Build conversation context (limit to last 6 exchanges)
+      const historyContext = Array.isArray(conversationHistory)
+        ? conversationHistory
+            .slice(-6)
+            .map((msg: { role: string; text: string }) =>
+              `${msg.role === 'host' ? 'You said' : 'They said'}: "${sanitizeInput(String(msg.text || ''), { maxLength: 500, allowNewlines: false })}"`
+            )
+            .join('\n')
+        : '';
 
-      prompt = `You are a brilliant, well-read intellectual having a real-time conversation with someone about "${topic}". You've read widely across philosophy, science, history, and culture. You make unexpected connections between ideas. You think out loud naturally.
+      userPrompt = `Topic of conversation: "${topic}"
 
-Your voice is warm but intellectually stimulating—like having coffee with someone who makes you feel smarter just by talking with them. You're genuinely curious, not performatively enthusiastic.
-
-${historyContext ? `Previous conversation:\n${historyContext}\n\n` : ''}
-
-They just said: "${userMessage}"
+${historyContext ? `Previous conversation:\n${historyContext}\n\n` : ''}They just said: "${userMessage}"
 
 Generate a SHORT (40-60 words) spoken response that:
 1. Actually RESPONDS to what they said - acknowledge their thought, build on it, or gently push back
@@ -68,21 +87,51 @@ DO NOT:
 - Sound like a chatbot ("That's a great question!")
 - Ignore what they actually said
 
-This should feel like a real conversation between two curious minds. Think out loud. Make connections. Be genuinely engaged with THEIR specific thought. Always end with something that invites their response.
+This should feel like a real conversation between two curious minds. Always end with something that invites their response.
 
 Just output the spoken text, nothing else.`;
     }
 
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 200,
-      temperature: 0.9,
-      messages: [{ role: 'user', content: prompt }],
+    const model = 'claude-sonnet-4-5-20250929';
+    const temperature = 0.8;
+    console.info('Instant host response', {
+      model,
+      temperature,
+      promptVersion: INSTANT_HOST_CONVO_VERSION,
+      starter: isConversationStarter,
     });
+
+    const message = await withRetry(
+      () =>
+        withTimeout(
+          anthropic.messages.create({
+            model,
+            max_tokens: 200,
+            temperature,
+            system: INSTANT_HOST_PERSONA,
+            messages: [{ role: 'user', content: userPrompt }],
+          }),
+          30000,
+          'instant-host-respond'
+        ),
+      { retries: 2, shouldRetry: isRetryableError, label: 'instant-host-respond' }
+    );
 
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
 
-    return NextResponse.json({ text });
+    const payload = { text };
+
+    if (isConversationStarter) {
+      const cacheKey = `starter:${topic.toLowerCase().trim()}`;
+      starterCache.set(cacheKey, payload);
+    }
+
+    return NextResponse.json(payload, {
+      headers: {
+        'X-Prompt-Version': INSTANT_HOST_CONVO_VERSION,
+        'X-Cache': isConversationStarter ? 'MISS' : 'BYPASS',
+      },
+    });
   } catch (error) {
     console.error('Respond error:', error);
     return NextResponse.json(

@@ -5,13 +5,15 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { withRetry, withTimeout } from '@/lib/async-utils';
+import { isRetryableError } from '@/lib/ai/retry';
 import {
   getResearchPrompt,
   getDraftPrompt,
   ENHANCEMENT_STAGES,
-  CRITIQUE_TEMPLATE,
   JUDGE_PROMPT,
   LEARNING_ADDONS,
+  PROMPT_VERSION,
   type EpisodeLength,
 } from './prompts';
 
@@ -57,6 +59,8 @@ interface LLMCallOptions {
   user: string;
   temperature?: number;
   model?: string;
+  promptVersion?: string;
+  purpose?: string;
 }
 
 async function callLLM({
@@ -65,30 +69,57 @@ async function callLLM({
   user,
   temperature = 0.7,
   model,
+  promptVersion,
+  purpose,
 }: LLMCallOptions): Promise<string> {
+  const resolvedModel = model || (provider === 'openai' ? DEFAULT_OPENAI_MODEL : DEFAULT_ANTHROPIC_MODEL);
+  console.info('LLM call', {
+    provider,
+    model: resolvedModel,
+    temperature,
+    promptVersion,
+    purpose,
+  });
+
   if (provider === 'openai') {
     const client = getOpenAIClient();
-    const response = await client.chat.completions.create({
-      model: model || DEFAULT_OPENAI_MODEL,
-      max_tokens: MAX_TOKENS,
-      temperature,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
+    const response = await withRetry(
+      () =>
+        withTimeout(
+          client.chat.completions.create({
+            model: resolvedModel,
+            max_tokens: MAX_TOKENS,
+            temperature,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+          }),
+          45000,
+          'openai-chat'
+        ),
+      { retries: 2, shouldRetry: isRetryableError, label: 'openai-chat' }
+    );
     return response.choices[0]?.message?.content || '';
   }
 
   // Anthropic
   const client = getAnthropicClient();
-  const message = await client.messages.create({
-    model: model || DEFAULT_ANTHROPIC_MODEL,
-    max_tokens: MAX_TOKENS,
-    temperature,
-    system,
-    messages: [{ role: 'user', content: user }],
-  });
+  const message = await withRetry(
+    () =>
+      withTimeout(
+        client.messages.create({
+          model: resolvedModel,
+          max_tokens: MAX_TOKENS,
+          temperature,
+          system,
+          messages: [{ role: 'user', content: user }],
+        }),
+        45000,
+        'anthropic-chat'
+      ),
+    { retries: 2, shouldRetry: isRetryableError, label: 'anthropic-chat' }
+  );
 
   const content = message.content[0];
   if (content.type === 'text') {
@@ -108,6 +139,8 @@ export async function runResearch(topic: string, length: EpisodeLength): Promise
     system: prompt.system,
     user: prompt.user,
     temperature: prompt.temperature,
+    promptVersion: PROMPT_VERSION,
+    purpose: 'research',
   });
 }
 
@@ -124,6 +157,8 @@ export async function runDraft(
     system: prompt.system,
     user: prompt.user,
     temperature: prompt.temperature,
+    promptVersion: PROMPT_VERSION,
+    purpose: `draft:${provider}`,
   });
 }
 
@@ -164,6 +199,8 @@ export async function runJudge(
       .replace('{draftA}', drafts[0].text)
       .replace('{draftB}', drafts[1].text),
     temperature: JUDGE_PROMPT.temperature,
+    promptVersion: PROMPT_VERSION,
+    purpose: 'judge',
   });
 
   // Parse winner
@@ -184,29 +221,11 @@ export async function runJudge(
   };
 }
 
-export async function runCritique(
-  topic: string,
-  text: string,
-  completedStage: string,
-  nextStage: string
-): Promise<string> {
-  return callLLM({
-    provider: 'anthropic',
-    system: CRITIQUE_TEMPLATE.system,
-    user: CRITIQUE_TEMPLATE.userTemplate
-      .replace('{topic}', topic)
-      .replace('{completedStage}', completedStage)
-      .replace('{nextStage}', nextStage)
-      .replace('{text}', text),
-    temperature: CRITIQUE_TEMPLATE.temperature,
-  });
-}
-
-// OPTIMIZED: No longer requires separate critique step
+// Enhancement stages run directly without a separate critique step
 export async function runEnhancementStage(
   stageIndex: number,
   topic: string,
-  research: string,
+  _research: string,
   previousOutput: string
 ): Promise<string> {
   const stage = ENHANCEMENT_STAGES[stageIndex];
@@ -215,9 +234,10 @@ export async function runEnhancementStage(
     system: stage.system,
     user: stage.userTemplate
       .replace('{topic}', topic)
-      .replace('{research}', research)
       .replace('{previousOutput}', previousOutput),
     temperature: stage.temperature,
+    promptVersion: PROMPT_VERSION,
+    purpose: `enhance:${stage.name}`,
   });
 }
 
@@ -229,7 +249,6 @@ export type PipelineStep =
   | { type: 'research'; status: 'running' | 'done'; research?: string }
   | { type: 'drafts'; status: 'running' | 'done'; drafts?: { label: string; text: string }[]; draftA?: string; draftB?: string }
   | { type: 'judge'; status: 'running' | 'done'; winner?: string; winnerText?: string; judgment?: string }
-  | { type: 'critique'; status: 'running' | 'done'; stageName: string; text?: string }
   | { type: 'enhancement'; status: 'running' | 'done'; stageName: string; stageIndex: number; text?: string; enhancedText?: string }
   | { type: 'done'; finalText: string };
 
@@ -331,5 +350,7 @@ export async function generateAddon(
     system: addon.system,
     user: addon.userTemplate.replace('{topic}', topic).replace('{transcript}', transcript),
     temperature: addon.temperature,
+    promptVersion: PROMPT_VERSION,
+    purpose: `addon:${addonKey}`,
   });
 }

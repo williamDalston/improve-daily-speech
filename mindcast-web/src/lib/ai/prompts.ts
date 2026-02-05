@@ -3,6 +3,10 @@
  * Ported from Python prompts.py
  */
 
+import { PIPELINE_PROMPT_VERSION } from './prompt-versions';
+
+export const PROMPT_VERSION = PIPELINE_PROMPT_VERSION;
+
 export const EPISODE_LENGTHS = {
   '5 min': { minutes: 5, wordsMin: 750, wordsMax: 900 },
   '10 min': { minutes: 10, wordsMin: 1500, wordsMax: 1800 },
@@ -49,6 +53,8 @@ Please produce a comprehensive research brief covering:
 
     Format sources as:
     [1] "Title" by Author(s) (Year) - Type
+
+    IMPORTANT: Only cite sources you are confident actually exist. If you are unsure whether a specific paper, book, or study is real, describe the finding without attributing it to a fabricated citation. It is better to have fewer real sources than many plausible-sounding but fictional ones.
 
 Be specific. Use names, dates, numbers. No vague generalities. Format as organized bullet points under each heading.`,
     temperature: 0.4,
@@ -97,9 +103,6 @@ export const ENHANCEMENT_STAGES = [
     system: `You are an elite documentary editor who transforms good scripts into exceptional ones. You add intellectual depth while ensuring the voice sounds completely human - not AI-generated. Every sentence must earn its place and sound natural when spoken aloud.`,
     userTemplate: `Topic: '{topic}'
 
-Research brief for reference:
-{research}
-
 Current script to enhance:
 {previousOutput}
 
@@ -127,9 +130,6 @@ Output only the enhanced script, preserving length. No commentary.`,
     system: `You are a speech coach and perfectionist editor. You optimize scripts for the human voice while making final refinements. Every word must flow naturally and sound great through headphones.`,
     userTemplate: `Topic: '{topic}'
 
-Research brief for reference:
-{research}
-
 Script to polish for audio:
 {previousOutput}
 
@@ -152,27 +152,6 @@ Output only the final polished script.`,
     temperature: 0.6,
   },
 ] as const;
-
-export const CRITIQUE_TEMPLATE = {
-  system: `You are a constructive critic providing feedback to improve documentary scripts. Your critiques are specific, actionable, and focused on what will make the biggest difference for the next enhancement stage.`,
-  userTemplate: `Topic: '{topic}'
-
-The script just completed: {completedStage}
-The next enhancement stage: {nextStage}
-
-Current script:
-{text}
-
----
-
-Provide a focused critique (3-5 bullet points) identifying:
-1. What's working well that should be preserved
-2. Specific weaknesses to address in the next stage
-3. Concrete suggestions for improvement
-
-Be specific and constructive. Reference exact phrases or sections when possible.`,
-  temperature: 0.6,
-};
 
 export const JUDGE_PROMPT = {
   system: `You are an expert judge evaluating documentary scripts. You assess intellectual depth, narrative engagement, authenticity of voice, and overall impact. You make decisive calls and explain your reasoning clearly.`,

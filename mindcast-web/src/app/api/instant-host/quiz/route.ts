@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import OpenAI from 'openai';
+import { withRetry, withTimeout } from '@/lib/async-utils';
+import { isRetryableError } from '@/lib/ai/retry';
+import { SimpleCache } from '@/lib/simple-cache';
+import { QUIZ_PROMPT_VERSION } from '@/lib/ai/prompt-versions';
+import { sanitizeTopic } from '@/lib/sanitize';
 
 export const dynamic = 'force-dynamic';
+const quizCache = new SimpleCache<{ questions: unknown[] }>(5 * 60 * 1000);
+
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+}
 
 // Simple quiz question generator - creates engaging trivia about the topic
 export async function POST(request: NextRequest) {
@@ -12,27 +27,40 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { topic } = await request.json();
+    const { topic: rawTopic } = await request.json();
 
-    if (!topic) {
+    if (!rawTopic) {
       return NextResponse.json({ error: 'Topic required' }, { status: 400 });
     }
 
-    // Use OpenAI to generate quiz questions
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a quiz master creating fun, engaging trivia questions. Generate exactly 3 multiple-choice questions about the given topic. Make them interesting and educational - mix easy and medium difficulty.
+    const topic = sanitizeTopic(rawTopic);
+    if (!topic) {
+      return NextResponse.json({ error: 'Invalid topic' }, { status: 400 });
+    }
 
-Return ONLY valid JSON in this exact format:
+    const cacheKey = topic.toLowerCase().trim();
+    const cached = quizCache.get(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, {
+        headers: {
+          'X-Prompt-Version': QUIZ_PROMPT_VERSION,
+          'X-Cache': 'HIT',
+        },
+      });
+    }
+
+    // Use OpenAI SDK with structured JSON output
+    const response = await withRetry(
+      () =>
+        withTimeout(
+          getOpenAI().chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `You are a quiz master creating fun, engaging trivia questions. Generate exactly 3 multiple-choice questions about the given topic. Make them interesting and educational - mix easy and medium difficulty.
+
+Return valid JSON with this structure:
 {
   "questions": [
     {
@@ -43,38 +71,39 @@ Return ONLY valid JSON in this exact format:
     }
   ]
 }`,
-          },
-          {
-            role: 'user',
-            content: `Create 3 trivia questions about: ${topic}`,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-      }),
-    });
+              },
+              {
+                role: 'user',
+                content: `Create 3 trivia questions about: ${topic}`,
+              },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.7,
+            max_tokens: 1000,
+          }),
+          20000,
+          'instant-host-quiz'
+        ),
+      { retries: 2, shouldRetry: isRetryableError, label: 'instant-host-quiz' }
+    );
 
-    if (!response.ok) {
-      throw new Error('Failed to generate quiz');
-    }
+    const content = response.choices[0]?.message?.content || '';
 
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content || '';
-
-    // Parse the JSON response
     try {
-      // Try to extract JSON from the response (in case there's extra text)
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return NextResponse.json(parsed);
-      }
+      const parsed = JSON.parse(content);
+      quizCache.set(cacheKey, parsed);
+      return NextResponse.json(parsed, {
+        headers: {
+          'X-Prompt-Version': QUIZ_PROMPT_VERSION,
+          'X-Cache': 'MISS',
+        },
+      });
     } catch {
       // If parsing fails, return default questions
     }
 
     // Fallback questions if generation fails
-    return NextResponse.json({
+    const fallback = {
       questions: [
         {
           question: `What makes "${topic.slice(0, 30)}" an interesting subject to explore?`,
@@ -110,6 +139,13 @@ Return ONLY valid JSON in this exact format:
           explanation: 'Active engagement through discussion, questioning, and application helps knowledge stick.',
         },
       ],
+    };
+    quizCache.set(cacheKey, fallback);
+    return NextResponse.json(fallback, {
+      headers: {
+        'X-Prompt-Version': QUIZ_PROMPT_VERSION,
+        'X-Cache': 'FALLBACK',
+      },
     });
   } catch (error) {
     console.error('Quiz generation error:', error);
