@@ -1,6 +1,6 @@
 /**
- * MindCast AI Pipeline Prompts
- * Ported from Python prompts.py
+ * MindCast AI Pipeline Prompts — v2
+ * Ear-first audio documentary generation with drift prevention
  */
 
 import { PIPELINE_PROMPT_VERSION } from './prompt-versions';
@@ -16,84 +16,188 @@ export const EPISODE_LENGTHS = {
 
 export type EpisodeLength = keyof typeof EPISODE_LENGTHS;
 
+// ============================================================================
+// 1a. Research — v2 (scene seeds + confidence-tagged sources)
+// ============================================================================
+
 export function getResearchPrompt(topic: string, length: EpisodeLength) {
   const config = EPISODE_LENGTHS[length];
 
   return {
-    system: `You are a meticulous research assistant with expertise across all academic disciplines. You produce structured research briefs that give a writer everything they need to create authoritative, specific, and deeply grounded documentary content. You always cite your sources.`,
-    user: `I need to write a ${config.minutes}-minute documentary-style audio episode on the topic: '${topic}'
+    system: `You are a meticulous research assistant. You produce structured research briefs that equip an audio documentary writer with authoritative, specific, grounded material.
+Citations: Only cite sources you are confident exist. If unsure, omit the citation and present the idea without attribution.`,
+    user: `I need to write a ${config.minutes}-minute documentary-style audio episode on: "${topic}"
 
-Please produce a comprehensive research brief covering:
+Produce a comprehensive research brief with:
 
-1. **Key Historical Milestones**: The 5-10 most important moments, discoveries, or turning points in this field. Include dates, names, and what specifically happened.
+1) Key historical milestones (5–10): dates, names, what happened, why it mattered.
+2) Foundational theories/frameworks: who, when, what it explains, critiques.
+3) Landmark studies/experiments: method, sample size if known, key findings, limitations.
+4) Surprising statistics or counterintuitive facts (with context).
+5) Key figures: what they did, what they changed.
+6) Current debates/open questions: who disagrees and why.
+7) Recent advances (last 5 years): what changed and what's next.
+8) Cross-disciplinary connections: unexpected links to other fields.
+9) Memorable quotes: only if confidently real, otherwise omit.
+10) Common misconceptions: what people get wrong and the correction.
+11) SOURCE LIST: numbered list. For each: Title, Author(s), Year, Type, confidence (high/medium).
+    IMPORTANT: If confidence is not high, either omit or mark as medium and do not rely on it for core claims.
 
-2. **Foundational Theories & Frameworks**: The major theoretical models that ground the field. Who developed them, when, and what do they explain?
+12) SCENE SEEDS (Theater of the Mind):
+3–5 moments the writer can dramatize.
 
-3. **Landmark Studies & Experiments**: Specific experiments or studies that changed understanding. Include methodology, key findings, and sample sizes where relevant.
+For each:
+- Scene: [one sentence describing the moment]
+- Setting: [place, time period]
+- Sensory palette: [2–3 *types* of sensation to evoke — NOT invented specifics]
+- Emotional beat: [what the listener should feel]
+- Support: [source #] | INFERRED (from [source #]) | SPECULATIVE
 
-4. **Surprising Statistics & Counterintuitive Facts**: Data points that would shock or intrigue a general audience.
+SPECULATIVE = no source basis, purely atmospheric. Writer may use or discard.
+Do NOT invent specific sensory facts (exact sounds, exact quotes, personal quirks) unless source-backed.
 
-5. **Key Figures & Their Contributions**: The people behind the breakthroughs — not just names, but what they specifically did and said.
-
-6. **Current Debates & Open Questions**: Where does the field disagree? What remains unresolved?
-
-7. **Recent Advances (last 5 years)**: The cutting edge — what's new and exciting?
-
-8. **Cross-Disciplinary Connections**: How does this topic connect to other fields in unexpected ways?
-
-9. **Memorable Quotes**: Powerful quotes from practitioners or thinkers in the field.
-
-10. **Common Misconceptions**: What does the public get wrong about this topic?
-
-11. **SOURCES**: At the end, provide a numbered list of sources referenced in this brief. For each source include:
-    - Title of the work/paper/book
-    - Author(s)
-    - Year of publication
-    - Type (book, journal article, report, study, etc.)
-
-    Format sources as:
-    [1] "Title" by Author(s) (Year) - Type
-
-    IMPORTANT: Only cite sources you are confident actually exist. If you are unsure whether a specific paper, book, or study is real, describe the finding without attributing it to a fabricated citation. It is better to have fewer real sources than many plausible-sounding but fictional ones.
-
-Be specific. Use names, dates, numbers. No vague generalities. Format as organized bullet points under each heading.`,
+Format the full brief as clean headings with bullet points.
+Be specific: names, dates, numbers when known. Avoid vague generalities.`,
     temperature: 0.4,
   };
 }
 
+// ============================================================================
+// 1b. Draft — v2 (ear-first + urgency without hallucination)
+// ============================================================================
+
 export function getDraftPrompt(topic: string, research: string, length: EpisodeLength, style?: string) {
   const config = EPISODE_LENGTHS[length];
 
-  // Build style instruction if provided
   const styleInstruction = style ? `\n\nIMPORTANT STYLE DIRECTION: ${style}` : '';
 
   return {
-    system: `You are a world-class documentary scriptwriter for audio content. Your goal is to make advanced knowledge accessible, memorable, and intellectually stimulating. Write like the narrator of the best BBC or PBS documentaries - authoritative yet warm, making complex ideas feel fascinating and approachable. Your scripts make knowledge stick.${styleInstruction}`,
-    user: `Topic: '${topic}'
+    system: `You are a world-class documentary scriptwriter for audio. Your job is to make advanced knowledge accessible, memorable, and emotionally alive, while staying faithful to the research brief.${styleInstruction}`,
+    user: `Topic: "${topic}"
 
-Research brief to draw from (use specific details from this):
+Research brief (use specific details from this, do not add unsupported claims):
 ${research}
 
----
+Write a ${config.minutes}-minute documentary script (approx. ${config.wordsMin}–${config.wordsMax} words).
 
-Create an eloquent, intellectually sophisticated, and deeply engaging documentary script on the topic of '${topic}'.
+NON-NEGOTIABLE AUDIO RULES:
+- Ear-first: prefer short to medium sentences. Avoid long nested clauses.
+- Signposting: every 60–90 seconds, re-ground the listener ("So here's the turn…", "Back to the key problem…", "Why this matters is…").
+- Concrete density: every 3–5 sentences include at least one specific detail from the brief (name, date, study finding, mechanism, place).
+- Scene moments: include 2–3 short "scene" beats using the Scene Seeds, without inventing specifics.
 
-The script should not only inform but also captivate, inspire, and challenge listeners, leaving them with lasting intellectual growth. It should feel like the best documentary narration - authoritative yet inviting, making the listener feel they're discovering profound truths.
+OPENING (8-second rule):
+Start mid-revelation with a specific detail that creates tension.
 
-Target: ${config.minutes}-minute audio episode (approximately ${config.wordsMin} to ${config.wordsMax} words).
+BANNED OPENINGS:
+- "Have you ever wondered…"
+- "In this episode…"
+- "Picture this:" followed by generic scene-setting
+- A dictionary definition
+- A rhetorical question without an immediate twist
 
-Guidelines:
-- Begin with a compelling hook (provocative quote, existential question, counterintuitive statistic, or personal narrative)
-- Challenge popular perceptions with evidence-based clarifications
-- Balance rigor and accessibility with relatable metaphors
-- Include cutting-edge research and open questions
-- Create a narrative arc with intellectual tension and release
-- End with synthesis, a final thought-provoking question, and an inspirational close
+TONE:
+Smart, warm, human. Confident voice, evidence-bound. Do not hedge academically, but do acknowledge uncertainty when the brief is uncertain.
 
-Do not use headers. The script should be ready to read aloud immediately as continuous narrative prose.`,
+AVOID:
+- Generic praise words ("fascinating", "incredible") unless you show why.
+- Listy structure ("firstly, secondly") and lecture vibes.
+- Claims not supported by the research brief.
+
+Output:
+- Script only, continuous narration prose, no headers, no commentary.`,
     temperature: 0.7,
   };
 }
+
+// ============================================================================
+// 1c. Judge — v2 (scored rubric + graft paragraph)
+// ============================================================================
+
+export const JUDGE_PROMPT = {
+  system: `You are an expert judge of audio documentary scripts. You score, then decide. You are decisive, practical, and specific.`,
+  userTemplate: `Topic: "{topic}"
+
+Compare two drafts and choose the better one.
+
+--- DRAFT A ---
+{draftA}
+
+--- DRAFT B ---
+{draftB}
+
+Step 1) Score each draft 1–10 on:
+- Hook Quality (first 30 seconds)
+- Complexity Management (clarity without losing accuracy)
+- Audio Flow (rhythm, breath, cadence)
+- Specificity (concrete details vs generalities)
+- Human Voice (natural, non-generic)
+- Overall Impact (memorability)
+
+Step 2) Pick the winner.
+
+Step 3) Identify the single best PARAGRAPH from the loser that should be grafted into the winner.
+Quote it exactly.
+
+Return in this format:
+SCORES:
+A: {hook:x, complexity:x, flow:x, specificity:x, voice:x, impact:x}
+B: {hook:x, complexity:x, flow:x, specificity:x, voice:x, impact:x}
+WINNER: A or B
+GRAFT_FROM_LOSER: "<exact paragraph>"
+WHY_WINNER_WINS: 3–6 bullet points`,
+  temperature: 0.4,
+};
+
+// ============================================================================
+// Support Check (drift prevention — runs after judge, before enhancement)
+// ============================================================================
+
+export const SUPPORT_CHECK_PROMPT = {
+  system: `You are a strict support checker. Your job is to ensure the script does not make claims that are unsupported by the provided research brief.`,
+  userTemplate: `Research brief:
+{research}
+
+Script:
+{script}
+
+List any statements in the script that are not supported by the brief.
+For each unsupported claim:
+- claim: "..."
+- severity: BLOCKER | SHOULD_FIX | MINOR
+- issue: "unsupported" | "overstated" | "too specific"
+- fix: "suggested rewrite"
+
+BLOCKER = factually invented, must fix before publish
+SHOULD_FIX = stretched beyond brief, fix if time permits
+MINOR = stylistic overreach, optional
+
+If everything is supported, output: OK`,
+  temperature: 0.3,
+};
+
+// ============================================================================
+// Pronunciation extraction (runs after final polish, metadata for TTS)
+// ============================================================================
+
+export const PRONUNCIATION_PROMPT = {
+  system: `You extract pronunciation guidance for TTS. Return a JSON object only.`,
+  userTemplate: `From the script below, extract any names or terms that are likely to be mispronounced.
+Return JSON:
+{
+  "pronunciations": [
+    { "term": "...", "phonetic": "...", "note": "optional context" }
+  ]
+}
+
+Script:
+{script}`,
+  temperature: 0.2,
+};
+
+// ============================================================================
+// Enhancement stages (2 passes)
+// ============================================================================
 
 // OPTIMIZED: Reduced from 4 stages to 2 for faster generation
 export const ENHANCEMENT_STAGES = [
@@ -153,32 +257,9 @@ Output only the final polished script.`,
   },
 ] as const;
 
-export const JUDGE_PROMPT = {
-  system: `You are an expert judge evaluating documentary scripts. You assess intellectual depth, narrative engagement, authenticity of voice, and overall impact. You make decisive calls and explain your reasoning clearly.`,
-  userTemplate: `Topic: '{topic}'
-
-Compare these two draft scripts and select the better one.
-
---- DRAFT A ---
-{draftA}
-
---- DRAFT B ---
-{draftB}
-
----
-
-Evaluate both drafts on:
-1. Intellectual depth and specificity
-2. Narrative engagement and flow
-3. Authenticity of voice (does it sound human?)
-4. Overall impact and memorability
-
-Provide your judgment in this format:
-ANALYSIS: [Your comparative analysis]
-WINNER: [A or B]
-BORROW FROM LOSER: [What elements from the losing draft should be incorporated]`,
-  temperature: 0.4,
-};
+// ============================================================================
+// Learning Add-ons
+// ============================================================================
 
 export const LEARNING_ADDONS = {
   quiz: {
@@ -193,6 +274,7 @@ Create a 5-question quiz with:
 - Multiple choice format (4 options each)
 - Brief explanations for correct answers
 - Questions that test understanding, not just memorization
+- Incorrect options must be plausible to someone generally educated who did not listen. No silly options, no giveaways, no obvious "joke answers."
 
 Format as JSON array with objects containing: question, options (array), correctIndex, explanation`,
     temperature: 0.5,

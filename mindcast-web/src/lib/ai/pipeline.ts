@@ -1,6 +1,6 @@
 /**
- * MindCast AI Pipeline
- * Server-side episode generation using Claude and GPT-4
+ * MindCast AI Pipeline — v2
+ * Server-side episode generation using Claude, GPT-4, and fast models
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -12,6 +12,8 @@ import {
   getDraftPrompt,
   ENHANCEMENT_STAGES,
   JUDGE_PROMPT,
+  SUPPORT_CHECK_PROMPT,
+  PRONUNCIATION_PROMPT,
   LEARNING_ADDONS,
   PROMPT_VERSION,
   type EpisodeLength,
@@ -59,6 +61,7 @@ interface LLMCallOptions {
   user: string;
   temperature?: number;
   model?: string;
+  maxTokens?: number;
   promptVersion?: string;
   purpose?: string;
 }
@@ -69,10 +72,12 @@ async function callLLM({
   user,
   temperature = 0.7,
   model,
+  maxTokens,
   promptVersion,
   purpose,
 }: LLMCallOptions): Promise<string> {
   const resolvedModel = model || (provider === 'openai' ? DEFAULT_OPENAI_MODEL : DEFAULT_ANTHROPIC_MODEL);
+  const resolvedMaxTokens = maxTokens ?? MAX_TOKENS;
   console.info('LLM call', {
     provider,
     model: resolvedModel,
@@ -88,7 +93,7 @@ async function callLLM({
         withTimeout(
           client.chat.completions.create({
             model: resolvedModel,
-            max_tokens: MAX_TOKENS,
+            max_tokens: resolvedMaxTokens,
             temperature,
             messages: [
               { role: 'system', content: system },
@@ -110,7 +115,7 @@ async function callLLM({
       withTimeout(
         client.messages.create({
           model: resolvedModel,
-          max_tokens: MAX_TOKENS,
+          max_tokens: resolvedMaxTokens,
           temperature,
           system,
           messages: [{ role: 'user', content: user }],
@@ -187,7 +192,7 @@ export async function runJudge(
   winnerLabel: string;
   winnerText: string;
   judgment: string;
-  borrowNotes: string;
+  graftParagraph: string;
 }> {
   // Use faster GPT-4o-mini for judging (doesn't need full model power)
   const judgment = await callLLM({
@@ -208,17 +213,61 @@ export async function runJudge(
   const winnerLetter = winnerMatch?.[1]?.toUpperCase() || 'A';
   const winnerIndex = winnerLetter === 'A' ? 0 : 1;
 
-  // Parse borrow notes
-  const borrowMatch = judgment.match(/BORROW FROM LOSER:\s*([\s\S]*?)$/i);
-  const borrowNotes = borrowMatch?.[1]?.trim() || '';
+  // Parse graft paragraph (v2 format)
+  const graftMatch = judgment.match(/GRAFT_FROM_LOSER:\s*"?([\s\S]*?)"?\s*(?:WHY_WINNER_WINS:|$)/i);
+  const graftParagraph = graftMatch?.[1]?.trim() || '';
 
   return {
     winnerIndex,
     winnerLabel: drafts[winnerIndex].label,
     winnerText: drafts[winnerIndex].text,
     judgment,
-    borrowNotes,
+    graftParagraph,
   };
+}
+
+// ============================================================================
+// Support Check (drift prevention)
+// ============================================================================
+
+export async function runSupportCheck(
+  research: string,
+  script: string
+): Promise<{ ok: boolean; issues: string }> {
+  const result = await callLLM({
+    provider: 'openai',
+    model: FAST_OPENAI_MODEL,
+    system: SUPPORT_CHECK_PROMPT.system,
+    user: SUPPORT_CHECK_PROMPT.userTemplate
+      .replace('{research}', research)
+      .replace('{script}', script),
+    temperature: SUPPORT_CHECK_PROMPT.temperature,
+    maxTokens: 2048,
+    promptVersion: PROMPT_VERSION,
+    purpose: 'support-check',
+  });
+
+  const ok = result.trim().toUpperCase() === 'OK';
+  return { ok, issues: ok ? '' : result };
+}
+
+// ============================================================================
+// Pronunciation Extraction (TTS metadata)
+// ============================================================================
+
+export async function runPronunciation(
+  script: string
+): Promise<string> {
+  return callLLM({
+    provider: 'openai',
+    model: FAST_OPENAI_MODEL,
+    system: PRONUNCIATION_PROMPT.system,
+    user: PRONUNCIATION_PROMPT.userTemplate.replace('{script}', script),
+    temperature: PRONUNCIATION_PROMPT.temperature,
+    maxTokens: 1024,
+    promptVersion: PROMPT_VERSION,
+    purpose: 'pronunciation',
+  });
 }
 
 // Enhancement stages run directly without a separate critique step
@@ -249,8 +298,10 @@ export type PipelineStep =
   | { type: 'research'; status: 'running' | 'done'; research?: string }
   | { type: 'drafts'; status: 'running' | 'done'; drafts?: { label: string; text: string }[]; draftA?: string; draftB?: string }
   | { type: 'judge'; status: 'running' | 'done'; winner?: string; winnerText?: string; judgment?: string }
+  | { type: 'support-check'; status: 'running' | 'done'; ok?: boolean; issues?: string }
   | { type: 'enhancement'; status: 'running' | 'done'; stageName: string; stageIndex: number; text?: string; enhancedText?: string }
-  | { type: 'done'; finalText: string };
+  | { type: 'pronunciation'; status: 'running' | 'done'; pronunciations?: string }
+  | { type: 'done'; finalText: string; pronunciations?: string };
 
 export async function* runFullPipeline(
   topic: string,
@@ -278,6 +329,11 @@ export async function* runFullPipeline(
     judgment: judgeResult.judgment,
   };
 
+  // Support Check (drift prevention — fast model)
+  yield { type: 'support-check', status: 'running' };
+  const supportResult = await runSupportCheck(research, judgeResult.winnerText);
+  yield { type: 'support-check', status: 'done', ok: supportResult.ok, issues: supportResult.issues };
+
   let currentText = judgeResult.winnerText;
 
   // OPTIMIZED: Only 2 enhancement stages (down from 4), no separate critique step
@@ -297,12 +353,17 @@ export async function* runFullPipeline(
     };
   }
 
-  yield { type: 'done', finalText: currentText };
+  // Pronunciation extraction (runs in parallel with nothing — just extract metadata)
+  yield { type: 'pronunciation', status: 'running' };
+  const pronunciations = await runPronunciation(currentText);
+  yield { type: 'pronunciation', status: 'done', pronunciations };
+
+  yield { type: 'done', finalText: currentText, pronunciations };
 }
 
 /**
  * Quick pipeline - faster generation with fewer refinements
- * Skips enhancement stages for speed while maintaining good quality
+ * Skips enhancement stages and support check for speed
  */
 export async function* runQuickPipeline(
   topic: string,

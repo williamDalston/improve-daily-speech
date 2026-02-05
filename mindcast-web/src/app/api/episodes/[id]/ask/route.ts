@@ -119,6 +119,7 @@ ${context}`;
 
     const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o-mini',
+      temperature: 0.3,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `User question: ${question}` },
