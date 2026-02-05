@@ -205,9 +205,9 @@ export function InstantHost({
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const audioUnlockedRef = useRef(false);
 
-  // Shorter delays on mobile — audio is unlocked on Generate tap so buffering is less needed
-  const audioBufferMs = isMobile ? 50 : 300;
-  const audioRetryMs = isMobile ? 200 : 500;
+  // Minimal delays — audio is unlocked on Generate tap so long buffering is unnecessary
+  const audioBufferMs = 50;
+  const audioRetryMs = 200;
 
   // Initialize audio element eagerly so it's ready for playback
   useEffect(() => {
@@ -493,15 +493,12 @@ export function InstantHost({
         audio.onplay = () => setIsPlaying(true);
         audio.onended = () => {
           setIsPlaying(false);
-          // After asking question, transition to listening phase
+          // After asking question, transition to listening immediately
           if (!isStopped && !episodeReady) {
-            setTimeout(() => {
-              setPhase('listening');
-              // Only start speech recognition if mic is enabled (not text mode)
-              if (micEnabled) {
-                startListening();
-              }
-            }, 300);
+            setPhase('listening');
+            if (micEnabled) {
+              startListening();
+            }
           }
         };
         audio.onerror = () => setIsPlaying(false);
@@ -592,12 +589,10 @@ export function InstantHost({
           audio.onplay = () => setIsPlaying(true);
           audio.onended = () => {
             setIsPlaying(false);
-            // After responding, start listening again if not stopped
+            // After responding, start listening again immediately
             if (!isStopped && !episodeReady && micEnabled) {
-              setTimeout(() => {
-                setPhase('listening');
-                startListening();
-              }, 500);
+              setPhase('listening');
+              startListening();
             } else if (episodeReady) {
               setPhase('asking');
             }
@@ -790,10 +785,8 @@ export function InstantHost({
           setPhase('listening');
 
           if (micEnabled) {
-            // Give user a moment, then start listening
-            phaseTimerRef.current = setTimeout(() => {
-              startListening();
-            }, 1000);
+            // Start listening immediately — no artificial pause
+            startListening();
           }
 
           // If user doesn't respond within 15 seconds, continue with next phase
@@ -808,7 +801,7 @@ export function InstantHost({
           const nextPhase = targetPhase === 'intro' ? 'deep_dive' : 'curiosity';
           phaseTimerRef.current = setTimeout(() => {
             generateAndSpeak(nextPhase);
-          }, 3000);
+          }, 1500);
         }
       };
 
@@ -1258,10 +1251,17 @@ export function InstantHost({
           <div className="flex flex-col gap-2 sm:flex-row">
             <button
               onClick={async () => {
+                // Pre-fetch conversation text while mic permission dialog shows
+                const textPromise = fetch('/api/instant-host/respond', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ topic, userMessage: '__START_CONVERSATION__', conversationHistory: [] }),
+                }).then(res => res.ok ? res.json() : null).catch(() => null);
+
                 const granted = await requestMicPermission();
+                const result = await textPromise;
                 if (granted) {
-                  // Start proactive conversation - AI asks first question immediately
-                  startProactiveConversation();
+                  startProactiveConversation(result?.text);
                 }
               }}
               className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand px-3 py-3 text-base text-white font-medium transition-all hover:bg-brand/90 sm:py-2.5 sm:text-sm"
