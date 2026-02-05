@@ -13,9 +13,10 @@ function triggerHaptic(style: 'light' | 'medium' | 'heavy' = 'light') {
   }
 }
 
-// Conversation memory utilities
+// Conversation memory utilities — localStorage (fast/offline) + server (persistent)
 const CONVERSATION_STORAGE_KEY = 'mindcast_instant_host_conversations';
 const MAX_STORED_CONVERSATIONS = 20;
+const MAX_MESSAGES_PER_CONVERSATION = 50;
 
 interface StoredConversation {
   topic: string;
@@ -27,6 +28,8 @@ interface StoredConversation {
 function normalizeTopicKey(topic: string): string {
   return topic.toLowerCase().trim().replace(/\s+/g, '_').slice(0, 100);
 }
+
+// ── localStorage (fast fallback) ──────────────────────────────────────────────
 
 function loadConversations(): StoredConversation[] {
   if (typeof window === 'undefined') return [];
@@ -41,7 +44,6 @@ function loadConversations(): StoredConversation[] {
 function saveConversations(conversations: StoredConversation[]): void {
   if (typeof window === 'undefined') return;
   try {
-    // Keep only the most recent conversations
     const trimmed = conversations
       .sort((a, b) => b.lastUpdated - a.lastUpdated)
       .slice(0, MAX_STORED_CONVERSATIONS);
@@ -51,13 +53,13 @@ function saveConversations(conversations: StoredConversation[]): void {
   }
 }
 
-function getConversationForTopic(topic: string): StoredConversation | null {
+function getConversationFromLocal(topic: string): StoredConversation | null {
   const conversations = loadConversations();
   const key = normalizeTopicKey(topic);
   return conversations.find(c => c.topicNormalized === key) || null;
 }
 
-function saveConversationForTopic(topic: string, history: Array<{role: 'host' | 'user', text: string}>): void {
+function saveConversationToLocal(topic: string, history: Array<{role: 'host' | 'user', text: string}>): void {
   const conversations = loadConversations();
   const key = normalizeTopicKey(topic);
   const existing = conversations.findIndex(c => c.topicNormalized === key);
@@ -65,7 +67,7 @@ function saveConversationForTopic(topic: string, history: Array<{role: 'host' | 
   const newConversation: StoredConversation = {
     topic,
     topicNormalized: key,
-    history: history.slice(-20), // Keep last 20 messages
+    history: history.slice(-MAX_MESSAGES_PER_CONVERSATION),
     lastUpdated: Date.now(),
   };
 
@@ -78,11 +80,50 @@ function saveConversationForTopic(topic: string, history: Array<{role: 'host' | 
   saveConversations(conversations);
 }
 
-function deleteConversationForTopic(topic: string): void {
+function deleteConversationFromLocal(topic: string): void {
   const conversations = loadConversations();
   const key = normalizeTopicKey(topic);
   const filtered = conversations.filter(c => c.topicNormalized !== key);
   saveConversations(filtered);
+}
+
+// ── Server persistence (durable, cross-device) ───────────────────────────────
+
+async function loadConversationFromServer(topic: string): Promise<Array<{role: 'host' | 'user', text: string}> | null> {
+  try {
+    const res = await fetch(`/api/conversations?topic=${encodeURIComponent(topic)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.conversation?.messages) return null;
+    return data.conversation.messages as Array<{role: 'host' | 'user', text: string}>;
+  } catch {
+    return null;
+  }
+}
+
+// Debounced server save — avoids hammering the API on every message
+let serverSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function saveConversationToServer(topic: string, history: Array<{role: 'host' | 'user', text: string}>): void {
+  if (serverSaveTimer) clearTimeout(serverSaveTimer);
+  serverSaveTimer = setTimeout(() => {
+    fetch('/api/conversations', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topic,
+        messages: history.slice(-MAX_MESSAGES_PER_CONVERSATION),
+      }),
+    }).catch(() => {
+      // Server save failed — localStorage still has it
+    });
+  }, 1000);
+}
+
+function deleteConversationFromServer(topic: string): void {
+  fetch(`/api/conversations?topic=${encodeURIComponent(topic)}`, {
+    method: 'DELETE',
+  }).catch(() => {});
 }
 
 interface InstantHostProps {
@@ -252,37 +293,58 @@ export function InstantHost({
   // Show sticky chat bar on mobile when in listening phase and chat mode enabled
   const showStickyBar = isMobile && isChatMode && phase === 'listening' && !episodeReady;
 
-  // Load previous conversation for this topic
+  // Load previous conversation for this topic — try server first, then localStorage
   useEffect(() => {
     if (conversationLoadedRef.current || !topic) return;
-
-    const previous = getConversationForTopic(topic);
-    if (previous && previous.history.length > 0) {
-      setHasPreviousConversation(true);
-      // Don't auto-load - let user decide to continue or start fresh
-    }
     conversationLoadedRef.current = true;
+
+    // Check server first (has cross-device history), fall back to localStorage
+    loadConversationFromServer(topic).then((serverMessages) => {
+      if (serverMessages && serverMessages.length > 0) {
+        // Server has history — also sync to localStorage for offline access
+        saveConversationToLocal(topic, serverMessages);
+        setHasPreviousConversation(true);
+        return;
+      }
+
+      // No server history — check localStorage
+      const local = getConversationFromLocal(topic);
+      if (local && local.history.length > 0) {
+        setHasPreviousConversation(true);
+      }
+    });
   }, [topic]);
 
-  // Auto-save conversation when it changes
+  // Auto-save conversation when it changes — localStorage (instant) + server (durable)
   useEffect(() => {
     if (conversationHistory.length > 0 && topic) {
-      saveConversationForTopic(topic, conversationHistory);
+      saveConversationToLocal(topic, conversationHistory);
+      saveConversationToServer(topic, conversationHistory);
     }
   }, [conversationHistory, topic]);
 
-  // Load previous conversation
-  const loadPreviousConversation = useCallback(() => {
-    const previous = getConversationForTopic(topic);
-    if (previous) {
-      setConversationHistory(previous.history);
+  // Load previous conversation — try server first, then localStorage
+  const loadPreviousConversation = useCallback(async () => {
+    // Try server first (fresher data, cross-device)
+    const serverMessages = await loadConversationFromServer(topic);
+    if (serverMessages && serverMessages.length > 0) {
+      setConversationHistory(serverMessages);
+      setHasPreviousConversation(false);
+      return;
+    }
+
+    // Fall back to localStorage
+    const local = getConversationFromLocal(topic);
+    if (local) {
+      setConversationHistory(local.history);
       setHasPreviousConversation(false);
     }
   }, [topic]);
 
-  // Clear conversation history
+  // Clear conversation history — from both localStorage and server
   const clearConversationHistory = useCallback(() => {
-    deleteConversationForTopic(topic);
+    deleteConversationFromLocal(topic);
+    deleteConversationFromServer(topic);
     setConversationHistory([]);
     setHasPreviousConversation(false);
   }, [topic]);
