@@ -118,6 +118,9 @@ export function EnhancedAudioPlayer({
   className,
 }: EnhancedAudioPlayerProps) {
   const audioRef = React.useRef<HTMLAudioElement>(null);
+  const audioContextRef = React.useRef<AudioContext | null>(null);
+  const compressorRef = React.useRef<DynamicsCompressorNode | null>(null);
+  const sourceNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null);
   const transcriptRef = React.useRef<HTMLDivElement>(null);
 
   const [isPlaying, setIsPlaying] = React.useState(false);
@@ -127,6 +130,33 @@ export function EnhancedAudioPlayer({
   const [isMuted, setIsMuted] = React.useState(false);
   const [playbackRate, setPlaybackRate] = React.useState(1);
   const [isLoading, setIsLoading] = React.useState(true);
+
+  const ensureAudioProcessing = React.useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || audioContextRef.current) return;
+
+    try {
+      const context = new AudioContext();
+      const source = context.createMediaElementSource(audio);
+      const compressor = context.createDynamicsCompressor();
+
+      compressor.threshold.value = -18;
+      compressor.knee.value = 24;
+      compressor.ratio.value = 3;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+
+      source.connect(compressor);
+      compressor.connect(context.destination);
+
+      audioContextRef.current = context;
+      compressorRef.current = compressor;
+      sourceNodeRef.current = source;
+    } catch {
+      // Cross-origin audio (e.g. CDN) may block createMediaElementSource.
+      // Audio still plays fine without the compressor — skip gracefully.
+    }
+  }, []);
 
   // UI state
   const [showChapters, setShowChapters] = React.useState(false);
@@ -219,6 +249,10 @@ export function EnhancedAudioPlayer({
     };
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handlePlay = () => {
+      ensureAudioProcessing();
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume().catch(() => {});
+      }
       setIsPlaying(true);
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     };
@@ -247,7 +281,16 @@ export function EnhancedAudioPlayer({
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('loadstart', handleLoadStart);
     };
-  }, [autoPlay, onEnded]);
+  }, [autoPlay, onEnded, ensureAudioProcessing]);
+
+  React.useEffect(() => {
+    return () => {
+      sourceNodeRef.current?.disconnect();
+      compressorRef.current?.disconnect();
+      audioContextRef.current?.close().catch(() => {});
+      audioContextRef.current = null;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;

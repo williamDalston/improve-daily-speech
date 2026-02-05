@@ -59,6 +59,18 @@ const envConfigs: EnvConfig[] = [
     hint: 'OpenAI API key for TTS',
   },
 
+  // AI Model overrides (optional - defaults used if unset)
+  {
+    name: 'ANTHROPIC_MODEL',
+    required: false,
+    hint: 'Override default Anthropic model (default: claude-sonnet-4-5-20250929)',
+  },
+  {
+    name: 'OPENAI_MODEL',
+    required: false,
+    hint: 'Override default OpenAI model (default: gpt-4o-2024-11-20)',
+  },
+
   // Stripe (required for payments)
   {
     name: 'STRIPE_SECRET_KEY',
@@ -84,6 +96,11 @@ const envConfigs: EnvConfig[] = [
     name: 'UPSTASH_REDIS_REST_TOKEN',
     required: false,
     hint: 'Upstash Redis REST token for production rate limiting',
+  },
+  {
+    name: 'ADMIN_EMAILS',
+    required: false,
+    hint: 'Comma-separated list of admin emails for QA dashboard access',
   },
 ];
 
@@ -140,6 +157,10 @@ export function validateEnv(): ValidationResult {
 
   if (!hasRedis && process.env.NODE_ENV === 'production') {
     warnings.push('No Redis configured. Rate limiting will use in-memory storage (resets on restart).');
+  }
+
+  if (!process.env.ADMIN_EMAILS && process.env.NODE_ENV === 'production') {
+    warnings.push('ADMIN_EMAILS not set. QA dashboard will be inaccessible in production.');
   }
 
   return {

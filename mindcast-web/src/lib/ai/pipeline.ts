@@ -42,9 +42,9 @@ function getOpenAIClient(): OpenAI {
   return openaiClient;
 }
 
-const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5-20250929';
-const DEFAULT_OPENAI_MODEL = 'gpt-4o-2024-11-20';
-const FAST_OPENAI_MODEL = 'gpt-4o-mini'; // For quick tasks like judging
+const DEFAULT_ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929';
+const DEFAULT_OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-2024-11-20';
+const FAST_OPENAI_MODEL = process.env.OPENAI_FAST_MODEL || 'gpt-4o-mini';
 const MAX_TOKENS = 16384;
 
 // ============================================================================

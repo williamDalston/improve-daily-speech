@@ -23,7 +23,7 @@ export async function GET(
     const maxWaitMs = 25000; // 25 seconds max wait (leave buffer for Vercel's 30s limit)
 
     const getJob = async () => {
-      return db.job.findUnique({
+      const job = await db.job.findUnique({
         where: { id: jobId },
         select: {
           id: true,
@@ -36,13 +36,20 @@ export async function GET(
           footprints: true,
           error: true,
           quickHook: true,
-          previewAudio: true,
           createdAt: true,
           startedAt: true,
           completedAt: true,
           episodeId: true,
         },
       });
+      if (!job) return null;
+
+      // Check previewAudio existence without fetching the full base64 blob
+      const hasPreview = await db.job.count({
+        where: { id: jobId, previewAudio: { not: null } },
+      });
+
+      return { ...job, hasPreviewAudio: hasPreview > 0 };
     };
 
     let job = await getJob();
@@ -98,9 +105,9 @@ export async function GET(
       response.footprints = job.footprints;
     }
 
-    // Include preview audio if available
-    if (job.previewAudio) {
-      response.previewAudio = `data:audio/mp3;base64,${job.previewAudio}`;
+    // Signal preview availability without sending the full base64 payload
+    if (job.hasPreviewAudio) {
+      response.previewAudio = true;
     }
 
     // Include error if failed

@@ -92,7 +92,7 @@ This should feel like a real conversation between two curious minds. Always end 
 Just output the spoken text, nothing else.`;
     }
 
-    const model = 'claude-sonnet-4-5-20250929';
+    const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929';
     const temperature = 0.8;
     console.info('Instant host response', {
       model,

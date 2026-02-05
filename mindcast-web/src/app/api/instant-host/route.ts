@@ -87,7 +87,7 @@ Sound like a friend who just finished reading something fascinating and can't wa
 Just output the spoken text, nothing else.`;
     }
 
-    const model = 'claude-sonnet-4-5-20250929';
+    const model = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5-20250929';
     const temperature = 0.8;
     console.info('Instant host prompt', {
       model,

@@ -78,6 +78,9 @@ export function AudioPlayer({
   className,
 }: AudioPlayerProps) {
   const audioRef = React.useRef<HTMLAudioElement>(null);
+  const audioContextRef = React.useRef<AudioContext | null>(null);
+  const compressorRef = React.useRef<DynamicsCompressorNode | null>(null);
+  const sourceNodeRef = React.useRef<MediaElementAudioSourceNode | null>(null);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
@@ -85,6 +88,33 @@ export function AudioPlayer({
   const [isMuted, setIsMuted] = React.useState(false);
   const [playbackRate, setPlaybackRate] = React.useState(1);
   const [isLoading, setIsLoading] = React.useState(true);
+  const ensureAudioProcessing = React.useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || audioContextRef.current) return;
+
+    try {
+      const context = new AudioContext();
+      const source = context.createMediaElementSource(audio);
+      const compressor = context.createDynamicsCompressor();
+
+      // Gentle compression for more consistent perceived loudness
+      compressor.threshold.value = -18;
+      compressor.knee.value = 24;
+      compressor.ratio.value = 3;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.25;
+
+      source.connect(compressor);
+      compressor.connect(context.destination);
+
+      audioContextRef.current = context;
+      compressorRef.current = compressor;
+      sourceNodeRef.current = source;
+    } catch {
+      // Cross-origin audio (e.g. CDN) may block createMediaElementSource.
+      // Audio still plays fine without the compressor — skip gracefully.
+    }
+  }, []);
 
   // Sleep timer state
   const [sleepTimerMinutes, setSleepTimerMinutes] = React.useState(0);
@@ -203,6 +233,10 @@ export function AudioPlayer({
       onTimeUpdate?.(audio.currentTime);
     };
     const handlePlay = () => {
+      ensureAudioProcessing();
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume().catch(() => {});
+      }
       setIsPlaying(true);
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'playing';
@@ -238,7 +272,16 @@ export function AudioPlayer({
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('loadstart', handleLoadStart);
     };
-  }, [autoPlay, onEnded]);
+  }, [autoPlay, onEnded, ensureAudioProcessing]);
+
+  React.useEffect(() => {
+    return () => {
+      sourceNodeRef.current?.disconnect();
+      compressorRef.current?.disconnect();
+      audioContextRef.current?.close().catch(() => {});
+      audioContextRef.current = null;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;
