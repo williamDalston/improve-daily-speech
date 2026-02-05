@@ -90,6 +90,7 @@ interface InstantHostProps {
   isGenerating: boolean;
   episodeReady: boolean;
   onReadyToPlay: () => void;
+  introTextPromise?: Promise<string | null> | null;
 }
 
 type HostPhase = 'idle' | 'intro' | 'deep_dive' | 'curiosity' | 'almost_ready' | 'asking' | 'listening' | 'responding';
@@ -152,6 +153,7 @@ export function InstantHost({
   isGenerating,
   episodeReady,
   onReadyToPlay,
+  introTextPromise,
 }: InstantHostProps) {
   const { type: deviceType, isMobile } = useDevice();
   const [phase, setPhase] = useState<HostPhase>('idle');
@@ -202,6 +204,10 @@ export function InstantHost({
   const conversationLoadedRef = useRef(false);
   const textInputRef = useRef<HTMLInputElement | null>(null);
   const audioUnlockedRef = useRef(false);
+
+  // Shorter delays on mobile — audio is unlocked on Generate tap so buffering is less needed
+  const audioBufferMs = isMobile ? 50 : 300;
+  const audioRetryMs = isMobile ? 200 : 500;
 
   // Initialize audio element eagerly so it's ready for playback
   useEffect(() => {
@@ -500,12 +506,12 @@ export function InstantHost({
         };
         audio.onerror = () => setIsPlaying(false);
 
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, audioBufferMs));
         try {
           await audio.play();
         } catch {
           // Retry once for mobile autoplay unlock timing
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, audioRetryMs));
           await audio.play();
         }
       }
@@ -599,12 +605,12 @@ export function InstantHost({
           audio.onerror = () => setIsPlaying(false);
 
           // Small delay to let browser buffer audio - prevents missing first words
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, audioBufferMs));
           try {
             await audio.play();
           } catch {
             // Retry once for mobile autoplay unlock timing
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, audioRetryMs));
             await audio.play();
           }
         }
@@ -702,18 +708,34 @@ export function InstantHost({
         setCurrentText(`Alright, let\u2019s explore ${shortTopic}`);
       }
 
-      // Get topic-specific content from API
-      const response = await fetch('/api/instant-host', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, phase: targetPhase }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to generate content');
+      // For intro phase, use pre-fetched text from handleGenerate (already in flight)
+      let text: string;
+      if (targetPhase === 'intro' && introTextPromise) {
+        const prefetched = await introTextPromise;
+        if (prefetched) {
+          text = prefetched;
+        } else {
+          // Pre-fetch failed, fall back to fresh fetch
+          const response = await fetch('/api/instant-host', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, phase: targetPhase }),
+          });
+          if (!response.ok) throw new Error('Failed to generate content');
+          const data = await response.json();
+          text = data.text;
+        }
+      } else {
+        // Non-intro phases: fetch normally
+        const response = await fetch('/api/instant-host', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, phase: targetPhase }),
+        });
+        if (!response.ok) throw new Error('Failed to generate content');
+        const data = await response.json();
+        text = data.text;
       }
-
-      const { text } = await response.json();
       setCurrentText(text);
 
       // If muted, show text but don't play audio or auto-progress
@@ -836,14 +858,13 @@ export function InstantHost({
 
       try {
         // Small delay before playing to let browser buffer audio
-        // This prevents missing the first few words
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, audioBufferMs));
         await audio.play();
       } catch (playError) {
         // Retry once — the audio unlock from the Generate button may need a moment
         console.warn('Audio play failed, retrying...', playError);
         try {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, audioRetryMs));
           await audio.play();
         } catch {
           console.warn('Audio play retry failed, skipping to next phase');
@@ -855,14 +876,14 @@ export function InstantHost({
       setIsLoadingAudio(false);
       setError('Could not start voice host');
     }
-  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening, deviceType, isMobile, requestMicPermission, startProactiveConversation]);
+  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening, deviceType, isMobile, requestMicPermission, startProactiveConversation, introTextPromise]);
 
-  // Start when generation begins
+  // Start when generation begins — fires immediately (no artificial delay)
   useEffect(() => {
     if (isGenerating && !hasStartedRef.current && topic) {
       hasStartedRef.current = true;
-      // Small delay to let UI settle
-      setTimeout(() => generateAndSpeak('intro'), 500);
+      // Single frame for layout paint, then start immediately
+      requestAnimationFrame(() => generateAndSpeak('intro'));
     }
 
     if (!isGenerating) {

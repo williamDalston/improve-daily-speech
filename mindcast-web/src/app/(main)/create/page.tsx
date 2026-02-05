@@ -338,6 +338,7 @@ export default function CreatePage() {
   const [pendingAutoGenerate, setPendingAutoGenerate] = useState(false); // Track if we should auto-start
   const [isGenerating, setIsGenerating] = useState(false);
   const [episodeReady, setEpisodeReady] = useState(false);
+  const introTextPromiseRef = useRef<Promise<string | null> | null>(null);
   const [autoPlayEpisode, setAutoPlayEpisode] = useState(false);
   const [steps, setSteps] = useState<PipelineStep[]>(PIPELINE_STEPS);
   const [error, setError] = useState<string | null>(null);
@@ -688,6 +689,14 @@ export default function CreatePage() {
     pollingRef.current = false;
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
+
+    // Pre-fetch intro text immediately — runs in parallel with job creation
+    // so InstantHost can skip the text API call and go straight to TTS
+    introTextPromiseRef.current = fetch('/api/instant-host', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic: fullTopic, phase: 'intro' }),
+    }).then(r => r.ok ? r.json() : null).then(d => d?.text || null).catch(() => null);
 
     setIsGenerating(true);
     setEpisodeReady(false);
@@ -1275,6 +1284,7 @@ export default function CreatePage() {
                   topic={topic}
                   isGenerating={isGenerating}
                   episodeReady={episodeReady}
+                  introTextPromise={introTextPromiseRef.current}
                   onReadyToPlay={() => {
                     setEpisodeReady(false);
                     setIsGenerating(false);
