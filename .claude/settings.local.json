@@ -46,7 +46,8 @@
       "Bash(xargs kill:*)",
       "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 3099 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }\")",
       "Bash(npx next dev:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npx vitest run)"
     ]
   }
 }

@@ -8,6 +8,8 @@
 
 Enter a topic. Get a researched, narrated audio episode that makes knowledge stick. MindCast uses a multi-stage AI pipeline: deep research, competitive drafting, expert judging, iterative enhancement, and professional text-to-speech to produce episodes that sound like the best BBC documentaries.
 
+The **Canon Protocol** transforms MindCast from a per-request generation service (~$1.25/episode) into a media platform. Popular topics are automatically detected, promoted, and remastered into high-quality "canon" episodes that can be served instantly to any user at zero marginal cost.
+
 ---
 
 ## Tech Stack
@@ -71,6 +73,45 @@ Topic
 
 **Quick Mode** skips enhancement stages and uses the winning draft directly.
 
+### Canon Protocol Pipeline
+
+When a topic is requested, the Canon Protocol runs alongside the generation pipeline:
+
+```
+User Request
+  |
+  v
+[Slug + Embed] ─── Topic Clustering ──── findOrCreateTopic()
+  |                 Exact slug match OR
+  |                 cosine similarity >= 0.92
+  |
+  v
+[Cache Check] ──── Is topic CANON with a blessed episode?
+  |                 YES → Clone episode for user (instant, $0.00)
+  |                 NO  → Continue to normal generation pipeline
+  |
+  v
+[Record Signal] ── TopicRequest created with cost, userId, type
+  |
+  v
+[Engagement] ───── Frontend tracks: completion %, saves, replays
+  |                 Signals flow into TopicRequest records
+  |
+  v
+[Cron: Evaluate] ─ Every 6h, score all CANDIDATE topics:
+  |                 canonScore = 0.30 × norm(requests)
+  |                            + 0.25 × norm(uniqueUsers)
+  |                            + 0.25 × completionRate
+  |                            + 0.20 × saveRate
+  |                 Promote if: requests ≥ 5, users ≥ 3,
+  |                             completion ≥ 60%, score ≥ 0.4
+  |
+  v
+[Cron: Remaster] ─ Every 6h (offset 3h), process QUEUED CanonJobs:
+                    Remaster pipeline → Quality gate → TTS → Upload
+                    Result: polished canon episode replaces interim
+```
+
 ### Prompt Versioning
 
 All prompts are versioned via `src/lib/ai/prompt-versions.ts`. Response headers include `X-Prompt-Version` for tracing which prompt generated a given output.
@@ -114,6 +155,20 @@ The research prompt instructs the model to only cite sources it is confident act
 | Streaks | Daily activity tracking with celebrations |
 | XP System | Points for episodes, quizzes, reflections, milestones |
 | Onboarding | Guided first-use tutorial |
+
+### Canon Protocol
+
+| Feature | Description |
+|---------|-------------|
+| Topic Clustering | Slug-based dedup + embedding similarity (cosine ≥ 0.92) |
+| Cache-Hit Routing | Canon topics served instantly at $0.00 marginal cost |
+| Signal Tracking | Completion %, saves, replays tracked per request |
+| Promotion Scoring | Weighted formula: requests, users, completion, saves |
+| Auto-Promotion | Cron evaluates candidates every 6h, promotes when thresholds met |
+| Remastering | Promoted topics get a quality-gated remaster with TTS |
+| Canon Badges | "Instant" badges on canon episodes in library and cards |
+| Popular Topics | Free users see canon topic suggestions when at generation limit |
+| Admin API | Full topic management: list, details, force promote/demote, jobs, stats |
 
 ### Subscription (Stripe)
 
@@ -176,7 +231,20 @@ mindcast-web/
 │       │   └── retry.ts         # Retry/backoff config
 │       ├── jobs/
 │       │   └── processor.ts     # Background job orchestration
+│       ├── canon/
+│       │   ├── index.ts             # Barrel exports
+│       │   ├── topic-slug.ts        # Slug normalization & dedup
+│       │   ├── topic-service.ts     # findOrCreateTopic, cache-hit, signals
+│       │   ├── scoring.ts           # canonScore formula & promotion logic
+│       │   ├── remaster-processor.ts# Canon remaster pipeline
+│       │   ├── topic-slug.test.ts   # Tests: slug normalization
+│       │   ├── scoring.test.ts      # Tests: scoring & promotion
+│       │   ├── topic-service.test.ts# Tests: topic service (mocked DB)
+│       │   └── admin-api.test.ts    # Tests: admin API endpoints
+│       ├── agents/
+│       │   └── cost-controller.ts   # Episode cost estimation
 │       ├── auth.ts              # NextAuth configuration
+│       ├── admin.ts             # Admin email allowlist check
 │       ├── db.ts                # Prisma client singleton
 │       ├── stripe.ts            # Stripe plans & subscription checks
 │       ├── storage.ts           # Vercel Blob audio storage
@@ -190,6 +258,8 @@ mindcast-web/
 │       └── utils.ts             # Shared utilities
 ├── next.config.js
 ├── tailwind.config.ts
+├── vitest.config.ts             # Test configuration
+├── vercel.json                  # Cron schedules + framework config
 ├── tsconfig.json
 └── package.json
 ```
@@ -207,6 +277,7 @@ mindcast-web/
 | GET, DELETE | `/api/jobs/[id]` | Job status / cancel job |
 | POST | `/api/jobs/reset` | Reset stuck job |
 | DELETE | `/api/episodes/[id]` | Delete episode |
+| PATCH | `/api/episodes/[id]` | Update engagement signals (completion, save, replay) |
 | GET | `/api/episodes/[id]/audio` | Stream episode audio |
 | POST | `/api/episodes/[id]/listen` | Record listen activity |
 | POST, DELETE | `/api/episodes/[id]/share` | Create/revoke share link |
@@ -257,6 +328,32 @@ mindcast-web/
 | POST | `/api/stripe/portal` | Open billing portal |
 | POST | `/api/stripe/webhook` | Stripe event handler |
 
+### Canon Protocol
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/topics/popular` | List canon topics available for instant generation |
+
+### Canon Admin API
+
+All admin endpoints require `isAdminEmail()` authorization.
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/admin/canon/topics` | List topics (filter by status, sort, search, paginate) |
+| GET | `/api/admin/canon/topics/[id]` | Topic detail: signals, promotion eval, requests, jobs |
+| POST | `/api/admin/canon/topics/[id]/promote` | Force-promote to CANON (optional `skipRemaster`) |
+| POST | `/api/admin/canon/topics/[id]/demote` | Demote to CANDIDATE or COLD, cancel queued jobs |
+| GET | `/api/admin/canon/jobs` | List remaster jobs (filter by status, paginate) |
+| GET | `/api/admin/canon/stats` | System overview: topic counts, cache hits, savings, top performers |
+
+### Cron Jobs (Vercel)
+
+| Schedule | Endpoint | Purpose |
+|----------|----------|---------|
+| `0 */6 * * *` (every 6h) | `/api/cron/canon-evaluate` | Score candidates, promote eligible topics |
+| `0 3,9,15,21 * * *` (offset 3h) | `/api/cron/canon-remaster` | Process queued remaster jobs |
+
 ### Infrastructure
 
 | Method | Endpoint | Purpose |
@@ -268,17 +365,29 @@ mindcast-web/
 
 ## Database Models (Prisma)
 
+### Core Models
+
 | Model | Key Fields | Purpose |
 |-------|-----------|---------|
 | User | email, isPro, streak, xp, interests, lastDailyDrop | Account + preferences |
-| Episode | topic, title, transcript, sources, audioUrl, status | Generated content |
-| Job | topic, length, style, status, progress, footprints | Pipeline execution |
+| Episode | topic, title, transcript, sources, audioUrl, status, **isCanon**, **topicId** | Generated content |
+| Job | topic, length, style, status, progress, footprints, **costCents**, **minutesGenerated** | Pipeline execution |
 | Reflect | topic, lenses (JSON), userId | Sovereign Mind entries |
 | Playlist | name, description, userId | Episode collections |
 | PlaylistEpisode | playlistId, episodeId, order | Playlist membership |
 | EpisodeReview | episodeId, nextReviewAt, interval, easeFactor | SM-2 scheduling |
 | Account | provider, providerAccountId | OAuth connections |
 | ProcessedWebhookEvent | eventId, processedAt | Stripe idempotency |
+
+### Canon Protocol Models
+
+| Model | Key Fields | Purpose |
+|-------|-----------|---------|
+| Topic | slug, title, status (CANDIDATE/CANON/COLD), requestCount, uniqueUsers, completionRate, saveRate, canonScore, canonEpisodeId, embedding (JSON) | Canonical topic — the "asset" in the media model |
+| TopicRequest | topicId, userId, type, cacheHit, completionPct, saved, replayed, costCents, episodeId | Per-request signal tracking — feeds the promotion algorithm |
+| SupportFlag | topicId, episodeId, claim, severity (BLOCKER/SHOULD_FIX/MINOR), issue, suggestion, resolved | Persisted support-check results for quality control |
+| TopicMetricDaily | topicId, day, requests, cacheHits, uniqueUsers, completions, saves, totalCostCents | Daily aggregated metrics for trend analysis |
+| CanonJob | topicId, status (QUEUED/RUNNING/SUCCEEDED/FAILED), episodeId, costCents, error | Remastering job for canon promotion |
 
 ---
 
@@ -313,6 +422,7 @@ UPSTASH_REDIS_REST_TOKEN=...
 BLOB_READ_WRITE_TOKEN=vercel_blob_...
 GEMINI_API_KEY=...
 ADMIN_EMAILS=you@example.com,co@example.com
+CRON_SECRET=<random-string>          # Vercel Cron auth (canon-evaluate, canon-remaster)
 ```
 
 ### Optional
@@ -368,6 +478,31 @@ Build config in `next.config.js`:
 - `undici` externalized to fix webpack private class fields error
 - Sentry wraps config only when `SENTRY_DSN` is set
 - Instrumentation hook validates env on startup
+
+Cron jobs configured in `vercel.json`:
+- `canon-evaluate` runs every 6 hours (scores candidates, promotes eligible topics)
+- `canon-remaster` runs every 6 hours offset by 3h (processes queued remaster jobs)
+- Both endpoints authenticate via `CRON_SECRET` Bearer token
+
+---
+
+## Testing
+
+Tests use **Vitest** with path alias support (`@/` → `./src/`).
+
+```bash
+npm test              # Run all tests once
+npm run test:watch    # Watch mode
+```
+
+| Test File | Tests | Coverage |
+|-----------|-------|----------|
+| `topic-slug.test.ts` | 29 | Slug normalization, unicode, stop words, truncation, clustering |
+| `scoring.test.ts` | 17 | Canon score formula, weight verification, promotion thresholds |
+| `topic-service.test.ts` | 13 | Topic creation, similarity clustering, signal tracking (mocked DB) |
+| `admin-api.test.ts` | 16 | Auth guards, topic CRUD, promote/demote, jobs, stats |
+
+**75 total tests** — all pure unit tests with mocked Prisma and OpenAI dependencies.
 
 ---
 
