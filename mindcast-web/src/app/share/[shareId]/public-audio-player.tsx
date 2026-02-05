@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface PublicAudioPlayerProps {
-  audioBase64: string;
+  audioUrl?: string;
+  audioBase64?: string;
   title: string;
 }
 
-export function PublicAudioPlayer({ audioBase64, title }: PublicAudioPlayerProps) {
+export function PublicAudioPlayer({ audioUrl, audioBase64, title }: PublicAudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -76,7 +77,7 @@ export function PublicAudioPlayer({ audioBase64, title }: PublicAudioPlayerProps
     <div className="rounded-xl bg-surface-secondary p-4 sm:p-6">
       <audio
         ref={audioRef}
-        src={`data:audio/mp3;base64,${audioBase64}`}
+        src={audioUrl || (audioBase64 ? `data:audio/mp3;base64,${audioBase64}` : undefined)}
         preload="metadata"
       />
 

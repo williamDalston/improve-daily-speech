@@ -342,7 +342,7 @@ export default function CreatePage() {
   const [autoPlayEpisode, setAutoPlayEpisode] = useState(false);
   const [steps, setSteps] = useState<PipelineStep[]>(PIPELINE_STEPS);
   const [error, setError] = useState<string | null>(null);
-  const [previewAudio, setPreviewAudio] = useState<string | null>(null);
+  const [previewAudioReady, setPreviewAudioReady] = useState(false);
   const [quickHook, setQuickHook] = useState<{
     hook: string;
     preview: string;
@@ -350,7 +350,7 @@ export default function CreatePage() {
   } | null>(null);
   const [result, setResult] = useState<{
     id: string;
-    audio: string;
+    audioUrl: string;
     transcript: string;
   } | null>(null);
 
@@ -511,9 +511,9 @@ export default function CreatePage() {
         setQuickHook(data.quickHook);
       }
 
-      // Update preview audio if available
-      if (data.previewAudio && !previewAudio) {
-        setPreviewAudio(data.previewAudio);
+      // Track when preview audio becomes available
+      if (data.previewAudio && !previewAudioReady) {
+        setPreviewAudioReady(true);
       }
 
       // Update footprints for AI transparency
@@ -537,7 +537,7 @@ export default function CreatePage() {
         if (data.episodeId) {
           setResult({
             id: data.episodeId,
-            audio: data.audio || '',
+            audioUrl: data.audioUrl || `/api/episodes/${data.episodeId}/audio`,
             transcript: '', // Will be loaded on episode page
           });
         }
@@ -569,7 +569,7 @@ export default function CreatePage() {
         setTimeout(() => pollJobStatus(jobId), 5000); // Longer delay on error
       }
     }
-  }, [quickHook, previewAudio, steps]);
+  }, [quickHook, previewAudioReady, steps]);
 
   // Update steps based on job status
   const updateStepsFromJobStatus = (status: string, progress: number, _currentStep?: string) => {
@@ -720,7 +720,7 @@ export default function CreatePage() {
     setAutoPlayEpisode(false);
     setError(null);
     setResult(null);
-    setPreviewAudio(null);
+    setPreviewAudioReady(false);
     setQuickHook(null);
     setFootprints([]);
     setTipIndex(0);
@@ -1486,7 +1486,7 @@ export default function CreatePage() {
               <CardTitle className="text-xl">{topic}</CardTitle>
             </CardHeader>
             <CardContent>
-              <AudioPlayer src={episodeResult.audio} title={topic} autoPlay={autoPlayEpisode} />
+              <AudioPlayer src={episodeResult.audioUrl} title={topic} autoPlay={autoPlayEpisode} />
             </CardContent>
           </Card>
 

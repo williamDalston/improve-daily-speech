@@ -60,6 +60,10 @@ export default async function SharePage({ params }: SharePageProps) {
   }
 
   const title = episode.title || episode.topic;
+  // Prefer streaming URL (CDN), fall back to base64 for older episodes
+  const audioUrl = episode.audioUrl
+    ? `/api/episodes/${episode.id}/audio`
+    : null;
   const audioBase64 = episode.job?.fullAudio;
 
   return (
@@ -109,8 +113,8 @@ export default async function SharePage({ params }: SharePageProps) {
             </div>
           </CardHeader>
           <CardContent>
-            {audioBase64 ? (
-              <PublicAudioPlayer audioBase64={audioBase64} title={title} />
+            {(audioUrl || audioBase64) ? (
+              <PublicAudioPlayer audioUrl={audioUrl ?? undefined} audioBase64={audioBase64 ?? undefined} title={title} />
             ) : (
               <div className="rounded-xl bg-surface-secondary p-6 text-center">
                 <p className="text-text-muted">Audio not available</p>

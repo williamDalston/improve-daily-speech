@@ -5,6 +5,8 @@ import { generateQuickHook } from '@/lib/ai/gemini';
 import { incrementFreeUsage } from '@/lib/stripe';
 import { parseSourcesFromResearch, type Source } from '@/lib/ai/sources';
 import { updateStreak, XP_REWARDS } from '@/lib/streak';
+import { PROMPT_VERSION } from '@/lib/ai/prompts';
+import { uploadAudio } from '@/lib/storage';
 
 type JobStatus = 'PENDING' | 'RESEARCH' | 'DRAFTING' | 'JUDGING' | 'ENHANCING' | 'AUDIO' | 'COMPLETE' | 'FAILED';
 type GenerationMode = 'quick' | 'deep';
@@ -162,6 +164,7 @@ export async function processJob(
     // Start processing
     await updateJobStatus(jobId, 'RESEARCH', 5, 'Starting...', { startedAt: new Date() });
     await addFootprint(jobId, 'Starting', `Beginning research on "${topic.slice(0, 50)}..."`);
+    await addFootprint(jobId, 'Prompt Version', `pipeline:${PROMPT_VERSION} | mode:${mode} | device:${deviceType}`);
 
     // 1. Generate quick hook (instant feedback)
     try {
@@ -359,18 +362,27 @@ export async function processJob(
         audioDurationSecs: audioDuration,
         voice: effectiveVoice, // Store the TTS voice used
         ...(parsedSources.length > 0 ? { sources: parsedSources as unknown as object } : {}),
-        // In production: audioUrl: uploadedUrl (S3/R2)
       },
     });
 
+    // 5b. Upload audio to blob storage (Vercel Blob / R2)
+    const audioUrl = await uploadAudio(audioBuffer, `episodes/${episode.id}.mp3`);
+    if (audioUrl) {
+      await db.episode.update({
+        where: { id: episode.id },
+        data: { audioUrl },
+      });
+    }
+
     // 6. Update job as complete
+    // Only store base64 in DB if blob upload failed (fallback)
     await db.job.update({
       where: { id: jobId },
       data: {
         status: 'COMPLETE',
         progress: 100,
         currentStep: 'Complete',
-        fullAudio: audioBase64,
+        ...(audioUrl ? {} : { fullAudio: audioBase64 }),
         episodeId: episode.id,
         completedAt: new Date(),
       },

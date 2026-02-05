@@ -37,7 +37,6 @@ export async function GET(
           error: true,
           quickHook: true,
           previewAudio: true,
-          fullAudio: true,
           createdAt: true,
           startedAt: true,
           completedAt: true,
@@ -112,8 +111,9 @@ export async function GET(
     // Include full result if complete
     if (job.status === 'COMPLETE') {
       response.episodeId = job.episodeId;
-      if (job.fullAudio) {
-        response.audio = `data:audio/mp3;base64,${job.fullAudio}`;
+      // Provide audio via the episode audio route (streams from CDN or base64 fallback)
+      if (job.episodeId) {
+        response.audioUrl = `/api/episodes/${job.episodeId}/audio`;
       }
     }
 
