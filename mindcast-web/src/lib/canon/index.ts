@@ -6,6 +6,7 @@ export {
   findSimilarTopics,
   checkCanonCache,
   cloneCanonEpisode,
+  updateTopicSignals,
 } from './topic-service';
 export {
   computeCanonScore,

@@ -5,15 +5,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * POST /api/cron/canon-evaluate
+ * GET /api/cron/canon-evaluate
  *
  * Batch-evaluate all CANDIDATE topics for canon promotion.
- * Protected by CRON_SECRET — call from Vercel Cron or external scheduler.
- *
- * Vercel cron config: add to vercel.json crons array
- * Path: /api/cron/canon-evaluate, Schedule: every 6 hours
+ * Protected by CRON_SECRET — called by Vercel Cron (every 6 hours).
  */
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   // Verify cron secret
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;

@@ -358,3 +358,49 @@ export async function recordRequest(input: RecordRequestInput) {
 
   return request;
 }
+
+// ============================================================================
+// Update engagement signals on existing TopicRequest
+// ============================================================================
+
+interface UpdateSignalsInput {
+  episodeId: string;
+  userId: string;
+  completionPct?: number;
+  saved?: boolean;
+  replayed?: boolean;
+}
+
+/**
+ * Update engagement signals on the most recent TopicRequest for an episode.
+ * Called from the frontend when the user completes, saves, or replays.
+ *
+ * Returns the updated request, or null if no matching request exists.
+ */
+export async function updateTopicSignals(input: UpdateSignalsInput) {
+  const { episodeId, userId, completionPct, saved, replayed } = input;
+
+  // Find the most recent TopicRequest for this episode + user
+  const existing = await db.topicRequest.findFirst({
+    where: { episodeId, userId },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, topicId: true },
+  });
+
+  if (!existing) return null;
+
+  // Build update payload — only set fields that are provided
+  const data: Record<string, unknown> = {};
+  if (completionPct !== undefined) data.completionPct = Math.min(Math.max(completionPct, 0), 1);
+  if (saved !== undefined) data.saved = saved;
+  if (replayed !== undefined) data.replayed = replayed;
+
+  if (Object.keys(data).length === 0) return null;
+
+  const updated = await db.topicRequest.update({
+    where: { id: existing.id },
+    data,
+  });
+
+  return updated;
+}

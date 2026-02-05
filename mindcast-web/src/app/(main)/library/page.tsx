@@ -32,6 +32,7 @@ export default async function LibraryPage() {
         createdAt: true,
         status: true,
         voice: true,
+        isCanon: true,
       },
     }),
     getStreakInfo(session.user.id),

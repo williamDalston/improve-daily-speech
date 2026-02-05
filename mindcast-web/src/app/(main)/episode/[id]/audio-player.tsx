@@ -1,9 +1,18 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { AudioPlayer } from '@/components/audio-player';
 import { LearningLoop } from '@/components/learning-loop';
 import { AskWhileListening } from '@/components/ask-while-listening';
+
+// Fire-and-forget signal update — non-blocking, no error surfacing
+function sendSignal(episodeId: string, data: Record<string, unknown>) {
+  fetch(`/api/episodes/${episodeId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).catch(() => {});
+}
 
 interface EpisodeAudioPlayerProps {
   episodeId: string;
@@ -15,11 +24,18 @@ export function EpisodeAudioPlayer({ episodeId, episodeTitle }: EpisodeAudioPlay
   const [showLearningLoop, setShowLearningLoop] = useState(false);
   const [learningLoopDismissed, setLearningLoopDismissed] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const completionSent = useRef(false);
 
   const handleAudioEnded = () => {
     // Show learning loop when audio finishes (if not already dismissed)
     if (!learningLoopDismissed) {
       setShowLearningLoop(true);
+    }
+
+    // Track completion signal for Canon scoring (once per session)
+    if (!completionSent.current) {
+      completionSent.current = true;
+      sendSignal(episodeId, { completionPct: 1.0 });
     }
   };
 
@@ -36,6 +52,13 @@ export function EpisodeAudioPlayer({ episodeId, episodeTitle }: EpisodeAudioPlay
     setLearningLoopDismissed(true);
   };
 
+  const handleReplay = useCallback(() => {
+    // If we already tracked a completion, this is a replay
+    if (completionSent.current) {
+      sendSignal(episodeId, { replayed: true });
+    }
+  }, [episodeId]);
+
   return (
     <div className="space-y-4">
       <AudioPlayer
@@ -43,6 +66,7 @@ export function EpisodeAudioPlayer({ episodeId, episodeTitle }: EpisodeAudioPlay
         title={episodeTitle}
         onEnded={handleAudioEnded}
         onTimeUpdate={handleTimeUpdate}
+        onReplay={handleReplay}
         className="sticky top-20 z-10"
       />
 

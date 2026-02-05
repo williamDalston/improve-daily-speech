@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Play, Clock, Calendar, Trash2, Loader2, Mic } from 'lucide-react';
+import { Play, Clock, Calendar, Trash2, Loader2, Mic, Zap } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ interface Episode {
   createdAt: Date | string;
   status: 'DRAFT' | 'PROCESSING' | 'READY' | 'ERROR';
   voice?: string;
+  isCanon?: boolean;
 }
 
 // Voice display labels
@@ -92,9 +93,17 @@ export function EpisodeCard({ episode, onDelete }: EpisodeCardProps) {
           <div className="min-w-0 flex-1">
             {/* Status badge and delete button */}
             <div className="flex items-center justify-between mb-2">
-              <Badge variant={statusBadge.variant}>
-                {statusBadge.label}
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge variant={statusBadge.variant}>
+                  {statusBadge.label}
+                </Badge>
+                {episode.isCanon && (
+                  <Badge variant="secondary" className="gap-1 text-brand">
+                    <Zap className="h-3 w-3" />
+                    Instant
+                  </Badge>
+                )}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"

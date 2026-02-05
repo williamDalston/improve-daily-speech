@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { updateTopicSignals } from '@/lib/canon';
 
 interface RouteParams {
   params: { id: string };
@@ -88,6 +89,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     where: { id: params.id },
     data: { updatedAt: new Date() },
   });
+
+  // Track save signal for Canon scoring (non-blocking)
+  updateTopicSignals({
+    episodeId,
+    userId: session.user.id,
+    saved: true,
+  }).catch(() => {});
 
   return NextResponse.json({ playlistEpisode }, { status: 201 });
 }

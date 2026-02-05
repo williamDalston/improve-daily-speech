@@ -5,14 +5,12 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes — remastering is heavy
 
 /**
- * POST /api/cron/canon-remaster
+ * GET /api/cron/canon-remaster
  *
  * Process queued CanonJobs (remaster pipeline + TTS + upload).
- * Protected by CRON_SECRET. Schedule after canon-evaluate.
- *
- * Recommended: run every 6 hours, offset from evaluation cron.
+ * Protected by CRON_SECRET — called by Vercel Cron (every 6 hours, offset from evaluate).
  */
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 

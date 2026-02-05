@@ -31,6 +31,7 @@ interface AudioPlayerProps {
   onEnded?: () => void;
   onTimeUpdate?: (currentTime: number) => void;
   onBookmarkAdd?: (bookmark: Bookmark) => void;
+  onReplay?: () => void;
   bookmarks?: Bookmark[];
   className?: string;
 }
@@ -74,6 +75,7 @@ export function AudioPlayer({
   onEnded,
   onTimeUpdate,
   onBookmarkAdd,
+  onReplay,
   bookmarks = [],
   className,
 }: AudioPlayerProps) {
@@ -324,6 +326,7 @@ export function AudioPlayer({
     if (!audio) return;
     audio.currentTime = 0;
     audio.play();
+    onReplay?.();
   };
 
   // Sleep timer effect

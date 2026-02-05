@@ -16,6 +16,7 @@ interface Episode {
   createdAt: Date | string;
   status: 'DRAFT' | 'PROCESSING' | 'READY' | 'ERROR';
   voice?: string;
+  isCanon?: boolean;
 }
 
 interface LibrarySearchProps {

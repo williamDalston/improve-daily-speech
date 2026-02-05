@@ -361,6 +361,11 @@ export default function CreatePage() {
   // Footprints for AI transparency (Reasoning Traces from UX Blueprint)
   const [footprints, setFootprints] = useState<Footprint[]>([]);
 
+  // Canon Protocol — cache hit and popular topic suggestions
+  const [cacheHitNotice, setCacheHitNotice] = useState(false);
+  const [showCanonSuggestions, setShowCanonSuggestions] = useState(false);
+  const [canonTopics, setCanonTopics] = useState<{ id: string; title: string }[]>([]);
+
   // Mobile stability: refs for cleanup and connection status
   const abortControllerRef = useRef<AbortController | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
@@ -371,6 +376,17 @@ export default function CreatePage() {
   // Actual job progress from API (0-100)
   const [jobProgress, setJobProgress] = useState(0);
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+
+  // Fetch popular canon topics when user hits free limit
+  useEffect(() => {
+    if (!showCanonSuggestions) return;
+    fetch('/api/topics/popular')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.topics) setCanonTopics(data.topics);
+      })
+      .catch(() => {});
+  }, [showCanonSuggestions]);
 
   // Restore topic from localStorage on mount (preserves across login redirect)
   useEffect(() => {
@@ -728,6 +744,8 @@ export default function CreatePage() {
     setCurrentJobId(null);
     setJobProgress(0);
     setGenerationStartTime(Date.now());
+    setCacheHitNotice(false);
+    setShowCanonSuggestions(false);
     setSteps(PIPELINE_STEPS.map((s) => ({ ...s, status: 'pending' })));
 
     try {
@@ -742,14 +760,47 @@ export default function CreatePage() {
       if (!response.ok) {
         const data = await response.json();
         if (data.needsUpgrade) {
+          // Show canon suggestions if available, otherwise go to pricing
+          if (data.canonAvailable && data.canonAvailable > 0) {
+            setError(data.hint || 'Free episode limit reached. Try a popular topic for instant access!');
+            setIsGenerating(false);
+            setShowCanonSuggestions(true);
+            return;
+          }
           router.push('/pricing');
           return;
         }
         throw new Error(data.error || 'Failed to create job');
       }
 
-      const { jobId } = await response.json();
+      const data = await response.json();
+      const { jobId } = data;
       setCurrentJobId(jobId);
+
+      // Canon cache hit — episode is already complete, skip generation UI
+      if (data.status === 'COMPLETE' && data.cacheHit) {
+        setResult({
+          id: data.jobId, // Will resolve via polling
+          audioUrl: '',
+          transcript: '',
+        });
+        // Fetch the actual episode via the job
+        const jobRes = await fetch(`/api/jobs/${jobId}`);
+        if (jobRes.ok) {
+          const jobData = await jobRes.json();
+          if (jobData.episodeId) {
+            setResult({
+              id: jobData.episodeId,
+              audioUrl: `/api/episodes/${jobData.episodeId}/audio`,
+              transcript: '',
+            });
+          }
+        }
+        setEpisodeReady(true);
+        setIsGenerating(false);
+        setCacheHitNotice(true);
+        return;
+      }
 
       // Start polling for status updates
       pollingRef.current = true;
@@ -1290,8 +1341,41 @@ export default function CreatePage() {
             {error && (
               <ErrorAlert
                 message={error}
-                onDismiss={() => setError(null)}
+                onDismiss={() => {
+                  setError(null);
+                  setShowCanonSuggestions(false);
+                }}
               />
+            )}
+
+            {/* Canon suggestions — shown when free user hits limit */}
+            {showCanonSuggestions && canonTopics.length > 0 && (
+              <div className="space-y-3 rounded-xl border border-brand/20 bg-gradient-to-br from-brand/5 to-brand/10 p-4">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-brand" />
+                  <span className="text-sm font-semibold text-text-primary">
+                    Popular topics — instant &amp; free
+                  </span>
+                </div>
+                <p className="text-xs text-text-secondary">
+                  These topics have been mastered by our AI and are ready to play instantly.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {canonTopics.map((ct) => (
+                    <button
+                      key={ct.id}
+                      onClick={() => {
+                        setTopic(ct.title);
+                        setError(null);
+                        setShowCanonSuggestions(false);
+                      }}
+                      className="rounded-full bg-white/80 dark:bg-surface border border-brand/20 px-3 py-1.5 text-sm text-text-primary transition-all hover:border-brand hover:bg-brand/10 active:scale-95"
+                    >
+                      {ct.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Loading State - Enhanced */}
@@ -1480,9 +1564,17 @@ export default function CreatePage() {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <Badge variant="success" className="mb-2 w-fit">
-                Episode Ready
-              </Badge>
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant="success">
+                  Episode Ready
+                </Badge>
+                {cacheHitNotice && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Zap className="h-3 w-3" />
+                    Instant
+                  </Badge>
+                )}
+              </div>
               <CardTitle className="text-xl">{topic}</CardTitle>
             </CardHeader>
             <CardContent>
