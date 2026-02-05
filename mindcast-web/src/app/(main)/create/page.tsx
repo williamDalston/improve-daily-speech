@@ -8,12 +8,10 @@ import {
   Sparkles,
   Loader2,
   Check,
-  Lightbulb,
   Zap,
   Clock,
   Brain,
   Mic,
-  BookOpen,
   WifiOff,
   GraduationCap,
   History,
@@ -45,30 +43,17 @@ interface Footprint {
 }
 
 const LENGTHS = [
-  { value: '5 min', label: '5 min', words: '~750', icon: Clock },
-  { value: '10 min', label: '10 min', words: '~1.5k', icon: Clock },
-  { value: '15 min', label: '15 min', words: '~2.2k', icon: Clock },
-  { value: '20 min', label: '20 min', words: '~3k', icon: Clock },
+  { value: '5 min', label: '5 min' },
+  { value: '10 min', label: '10 min' },
+  { value: '15 min', label: '15 min' },
+  { value: '20 min', label: '20 min' },
 ];
 
-// Rotating tips shown during generation - more engaging
+// Brief tips shown during generation
 const LOADING_TIPS = [
-  { icon: Brain, text: 'Diving deep into your topic from multiple perspectives...' },
-  { icon: BookOpen, text: 'Gathering the most fascinating angles and insights...' },
-  { icon: Sparkles, text: 'Crafting a narrative that will actually stick with you...' },
-  { icon: Mic, text: 'Optimizing for natural, engaging audio delivery...' },
-  { icon: Lightbulb, text: 'Adding those "aha!" moments that make learning memorable...' },
-  { icon: Zap, text: 'Making complex ideas surprisingly simple...' },
-];
-
-// Fun facts shown while waiting (rotates with tips)
-const WAITING_FACTS = [
-  'Audio learning engages your brain differently than reading - you retain up to 40% more!',
-  'The best time to listen to educational content is during "dead time" - commutes, workouts, chores.',
-  'Spaced repetition with audio helps move knowledge from short-term to long-term memory.',
-  'Your brain processes spoken words 3x faster than written ones.',
-  'Learning something new creates physical changes in your brain within minutes.',
-  'Explaining concepts aloud (even to yourself) dramatically improves retention.',
+  { icon: Brain, text: 'Researching your topic...' },
+  { icon: Sparkles, text: 'Crafting the narrative...' },
+  { icon: Mic, text: 'Generating audio...' },
 ];
 
 // Topic templates - structured prompts that reduce friction
@@ -79,7 +64,6 @@ const TOPIC_TEMPLATES = [
     label: 'Explain like I\'m new',
     prompt: 'Explain [TOPIC] from first principles',
     placeholder: 'quantum computing, blockchain, CRISPR...',
-    description: 'Beginner-friendly breakdown',
   },
   {
     id: 'history',
@@ -87,15 +71,13 @@ const TOPIC_TEMPLATES = [
     label: 'History of...',
     prompt: 'The history of [TOPIC] in 10 minutes',
     placeholder: 'the internet, democracy, money...',
-    description: 'Chronological journey',
   },
   {
     id: 'controversy',
     icon: Scale,
     label: 'The debate around...',
     prompt: '[TOPIC] through the lens of its biggest controversies',
-    placeholder: 'AI ethics, nuclear energy, social media...',
-    description: 'Multiple perspectives',
+    placeholder: 'AI ethics, nuclear energy...',
   },
   {
     id: 'versus',
@@ -103,7 +85,6 @@ const TOPIC_TEMPLATES = [
     label: 'X vs Y',
     prompt: '[TOPIC]: what\'s the real difference and which is better?',
     placeholder: 'capitalism vs socialism, iOS vs Android...',
-    description: 'Compare and contrast',
   },
   {
     id: 'misconceptions',
@@ -111,7 +92,6 @@ const TOPIC_TEMPLATES = [
     label: '5 myths about...',
     prompt: '5 common misconceptions about [TOPIC] debunked',
     placeholder: 'evolution, vaccines, the brain...',
-    description: 'Myth-busting',
   },
   {
     id: 'science',
@@ -119,7 +99,6 @@ const TOPIC_TEMPLATES = [
     label: 'The science of...',
     prompt: 'The science behind [TOPIC] - what research really shows',
     placeholder: 'sleep, happiness, productivity...',
-    description: 'Research-backed',
   },
 ];
 
@@ -170,19 +149,16 @@ const KNOWLEDGE_LEVELS = [
   {
     id: 'beginner',
     label: 'Beginner',
-    description: 'New to this topic',
     prompt: 'Explain from first principles. Avoid jargon and assume no prior knowledge.',
   },
   {
     id: 'intermediate',
     label: 'Intermediate',
-    description: 'Some familiarity',
     prompt: 'Assume basic understanding. Build on fundamentals with deeper insights.',
   },
   {
     id: 'advanced',
     label: 'Advanced',
-    description: 'Well-versed',
     prompt: 'Skip basics. Focus on nuances, edge cases, and advanced concepts.',
   },
 ];
@@ -223,81 +199,21 @@ const CONTENT_CONSTRAINTS = [
 
 // Voice Options - OpenAI TTS voices for episode narration
 const VOICE_OPTIONS = [
-  {
-    id: 'nova',
-    label: 'Nova',
-    description: 'Warm & friendly',
-    emoji: '🎙️',
-  },
-  {
-    id: 'alloy',
-    label: 'Alloy',
-    description: 'Neutral & balanced',
-    emoji: '🔊',
-  },
-  {
-    id: 'echo',
-    label: 'Echo',
-    description: 'Clear & resonant',
-    emoji: '📢',
-  },
-  {
-    id: 'fable',
-    label: 'Fable',
-    description: 'Expressive & storytelling',
-    emoji: '📖',
-  },
-  {
-    id: 'onyx',
-    label: 'Onyx',
-    description: 'Deep & authoritative',
-    emoji: '🎭',
-  },
-  {
-    id: 'shimmer',
-    label: 'Shimmer',
-    description: 'Bright & engaging',
-    emoji: '✨',
-  },
+  { id: 'nova', label: 'Nova', emoji: '🎙️' },
+  { id: 'alloy', label: 'Alloy', emoji: '🔊' },
+  { id: 'echo', label: 'Echo', emoji: '📢' },
+  { id: 'fable', label: 'Fable', emoji: '📖' },
+  { id: 'onyx', label: 'Onyx', emoji: '🎭' },
+  { id: 'shimmer', label: 'Shimmer', emoji: '✨' },
 ];
 
 // Style Lenses - change the AI's perspective/tone (from UX Blueprint)
 const STYLE_LENSES = [
-  {
-    id: 'balanced',
-    label: 'Balanced',
-    description: 'Neutral & informative',
-    emoji: '⚖️',
-    prompt: '',
-  },
-  {
-    id: 'academic',
-    label: 'Academic',
-    description: 'Scholarly & precise',
-    emoji: '🎓',
-    prompt: 'Take an academic, scholarly approach. Use precise language, cite specific research, and maintain intellectual rigor.',
-  },
-  {
-    id: 'conversational',
-    label: 'Casual',
-    description: 'Friendly & relatable',
-    emoji: '💬',
-    prompt: 'Use a warm, conversational tone like you\'re explaining to a friend. Include relatable analogies and avoid jargon.',
-  },
-  {
-    id: 'skeptical',
-    label: 'Skeptical',
-    description: 'Critical & questioning',
-    emoji: '🔍',
-    prompt: 'Take a critical, skeptical approach. Question assumptions, examine the evidence, and present counterarguments.',
-  },
-  {
-    id: 'enthusiastic',
-    label: 'Enthusiastic',
-    description: 'Energetic & passionate',
-    emoji: '✨',
-    prompt: 'Bring infectious enthusiasm! Highlight what makes this topic fascinating and convey genuine excitement for the subject.',
-  },
+  { id: 'balanced', label: 'Balanced', emoji: '⚖️', prompt: '' },
+  { id: 'academic', label: 'Academic', emoji: '🎓', prompt: 'Take an academic, scholarly approach. Use precise language, cite specific research, and maintain intellectual rigor.' },
+  { id: 'conversational', label: 'Casual', emoji: '💬', prompt: 'Use a warm, conversational tone like you\'re explaining to a friend. Include relatable analogies and avoid jargon.' },
+  { id: 'skeptical', label: 'Skeptical', emoji: '🔍', prompt: 'Take a critical, skeptical approach. Question assumptions, examine the evidence, and present counterarguments.' },
+  { id: 'enthusiastic', label: 'Enthusiastic', emoji: '✨', prompt: 'Bring infectious enthusiasm! Highlight what makes this topic fascinating and convey genuine excitement for the subject.' },
 ];
 
 type PipelineStep = {
@@ -363,9 +279,8 @@ export default function CreatePage() {
     personalContext: personalContext.trim() || undefined,
   };
 
-  // Rotating tip and fact indices
+  // Rotating tip index
   const [tipIndex, setTipIndex] = useState(0);
-  const [factIndex, setFactIndex] = useState(0);
 
   // Footprints for AI transparency (Reasoning Traces from UX Blueprint)
   const [footprints, setFootprints] = useState<Footprint[]>([]);
@@ -418,12 +333,8 @@ export default function CreatePage() {
     const tipInterval = setInterval(() => {
       setTipIndex((prev) => (prev + 1) % LOADING_TIPS.length);
     }, 4000);
-    const factInterval = setInterval(() => {
-      setFactIndex((prev) => (prev + 1) % WAITING_FACTS.length);
-    }, 6000);
     return () => {
       clearInterval(tipInterval);
-      clearInterval(factInterval);
     };
   }, [isGenerating]);
 
@@ -980,7 +891,6 @@ export default function CreatePage() {
                             {template.label}
                           </span>
                         </div>
-                        <span className="text-xs text-text-muted">{template.description}</span>
                       </button>
                     );
                   })}
@@ -1007,20 +917,9 @@ export default function CreatePage() {
                 className="min-h-[80px] resize-none text-base sm:min-h-[100px]"
               />
 
-              {/* Show prompt preview when template selected */}
-              {selectedTemplate && topic && !isGenerating && (
-                <div className="rounded-lg bg-surface-secondary p-3">
-                  <p className="text-xs text-text-muted mb-1">Your episode will cover:</p>
-                  <p className="text-sm text-text-primary">
-                    {TOPIC_TEMPLATES.find(t => t.id === selectedTemplate)?.prompt.replace('[TOPIC]', topic)}
-                  </p>
-                </div>
-              )}
-
               {/* Quick suggestions - shown when no template selected */}
               {!topic && !isGenerating && !selectedTemplate && (
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <span className="text-xs text-text-muted">Quick start:</span>
                   {QUICK_SUGGESTIONS.map((suggestion) => (
                     <button
                       key={suggestion}
@@ -1122,7 +1021,6 @@ export default function CreatePage() {
                         )}>
                           {level.label}
                         </span>
-                        <span className="text-xs text-text-muted">{level.description}</span>
                       </button>
                     ))}
                   </div>
@@ -1212,7 +1110,6 @@ export default function CreatePage() {
                           )}>
                             {voice.label}
                           </span>
-                          <span className="text-xs text-text-muted">{voice.description}</span>
                         </button>
                         {/* Preview button */}
                         <button
@@ -1238,9 +1135,6 @@ export default function CreatePage() {
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-text-muted text-center">
-                    Tap the speaker icon to preview each voice
-                  </p>
                 </div>
 
                 {/* Make It About Me - Personalization */}
@@ -1269,9 +1163,6 @@ export default function CreatePage() {
 
                   {showPersonalization && (
                     <div className="animate-fade-in space-y-2 rounded-xl border border-border bg-surface p-4">
-                      <p className="text-xs text-text-muted">
-                        Add personal context to get tailored examples and perspectives
-                      </p>
                       <Textarea
                         placeholder="e.g., I'm a high school teacher, I'm learning to invest, I work in healthcare..."
                         value={personalContext}
@@ -1324,7 +1215,6 @@ export default function CreatePage() {
                     )}
                   >
                     <span className="text-lg font-semibold">{l.label}</span>
-                    <span className="text-xs text-text-muted">{l.words} words</span>
                   </button>
                 ))}
               </div>
@@ -1353,7 +1243,7 @@ export default function CreatePage() {
                         Quick
                       </span>
                     </div>
-                    <span className="text-xs text-text-muted">~3-5 min, good quality</span>
+                    <span className="text-xs text-text-muted">Faster</span>
                   </button>
                   <button
                     onClick={() => setGenerationMode('deep')}
@@ -1371,7 +1261,7 @@ export default function CreatePage() {
                         Deep
                       </span>
                     </div>
-                    <span className="text-xs text-text-muted">~8-12 min, best quality</span>
+                    <span className="text-xs text-text-muted">Best quality</span>
                   </button>
                 </div>
               </div>
@@ -1397,9 +1287,6 @@ export default function CreatePage() {
                     Popular topics — instant &amp; free
                   </span>
                 </div>
-                <p className="text-xs text-text-secondary">
-                  These topics have been mastered by our AI and are ready to play instantly.
-                </p>
                 <div className="flex flex-wrap gap-2">
                   {canonTopics.map((ct) => (
                     <button
@@ -1455,38 +1342,15 @@ export default function CreatePage() {
                       "{quickHook.hook}"
                     </p>
                     <p className="text-sm text-text-secondary">{quickHook.preview}</p>
-                    <div className="flex items-start gap-2 rounded-lg bg-white/80 p-3 dark:bg-surface">
-                      <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                      <p className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Fun fact: </span>
-                        {quickHook.funFact}
-                      </p>
-                    </div>
                   </div>
                 ) : (
-                  /* Initial loading state before hook arrives - more engaging */
-                  <div className="space-y-4 rounded-xl border border-brand/20 bg-gradient-to-br from-brand/5 to-brand/10 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="h-12 w-12 rounded-full bg-brand/20" />
-                        <Loader2 className="absolute inset-0 m-auto h-6 w-6 animate-spin text-brand" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-text-primary">Creating your episode...</p>
-                        <p className="text-sm text-text-secondary">About "{topic.slice(0, 40)}{topic.length > 40 ? '...' : ''}"</p>
-                      </div>
+                  /* Simple loading state before hook arrives */
+                  <div className="flex items-center gap-3 rounded-xl border border-brand/20 bg-gradient-to-br from-brand/5 to-brand/10 p-4">
+                    <div className="relative">
+                      <div className="h-10 w-10 rounded-full bg-brand/20" />
+                      <Loader2 className="absolute inset-0 m-auto h-5 w-5 animate-spin text-brand" />
                     </div>
-                    {/* Rotating fact while waiting */}
-                    <div
-                      key={factIndex}
-                      className="animate-fade-in flex items-start gap-2 rounded-lg bg-white/80 p-3 dark:bg-surface"
-                    >
-                      <Brain className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
-                      <p className="text-sm text-text-secondary">
-                        <span className="font-medium text-text-primary">Did you know? </span>
-                        {WAITING_FACTS[factIndex]}
-                      </p>
-                    </div>
+                    <p className="font-medium text-text-primary">Creating your episode...</p>
                   </div>
                 )}
 
