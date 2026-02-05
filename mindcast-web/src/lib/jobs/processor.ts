@@ -8,6 +8,8 @@ import { updateStreak, XP_REWARDS } from '@/lib/streak';
 import { PROMPT_VERSION } from '@/lib/ai/prompts';
 import { withTimeout } from '@/lib/async-utils';
 import { uploadAudio } from '@/lib/storage';
+import { estimateEpisodeCost } from '@/lib/agents/cost-controller';
+import { findOrCreateTopic, recordRequest } from '@/lib/canon';
 
 type JobStatus = 'PENDING' | 'RESEARCH' | 'DRAFTING' | 'JUDGING' | 'ENHANCING' | 'AUDIO' | 'COMPLETE' | 'FAILED';
 type GenerationMode = 'quick' | 'deep';
@@ -420,7 +422,16 @@ export async function processJob(
       });
     }
 
-    // 6. Update job as complete
+    // 6. Calculate cost estimate and update job as complete
+    const lengthMinutes = audioDuration / 60;
+    let costCents: number | undefined;
+    try {
+      const costBreakdown = estimateEpisodeCost({ lengthMinutes });
+      costCents = Math.round(costBreakdown.total * 100); // dollars → cents
+    } catch (e) {
+      console.warn('Cost estimation failed:', e);
+    }
+
     // Only store base64 in DB if blob upload failed (fallback)
     await db.job.update({
       where: { id: jobId },
@@ -431,6 +442,8 @@ export async function processJob(
         ...(audioUrl ? {} : { fullAudio: audioBase64 }),
         episodeId: episode.id,
         completedAt: new Date(),
+        ...(costCents !== undefined ? { costCents } : {}),
+        minutesGenerated: Math.round(lengthMinutes * 100) / 100,
       },
     });
 
@@ -445,6 +458,29 @@ export async function processJob(
     } catch (e) {
       // Non-critical, don't fail the job
       console.log('Streak update failed:', e);
+    }
+
+    // 9. Canon Protocol: create/link Topic + record TopicRequest
+    try {
+      const { topic: canonTopic } = await findOrCreateTopic(topic);
+
+      // Link episode to topic
+      await db.episode.update({
+        where: { id: episode.id },
+        data: { topicId: canonTopic.id },
+      });
+
+      // Record the request with cost signal
+      await recordRequest({
+        topicId: canonTopic.id,
+        userId,
+        episodeId: episode.id,
+        costCents,
+        cacheHit: false, // Fresh generation, not a cache hit
+      });
+    } catch (e) {
+      // Non-critical — canon tracking should never break episode generation
+      console.warn('Canon topic tracking failed:', e);
     }
   } catch (error) {
     console.error('Job processing error:', error);

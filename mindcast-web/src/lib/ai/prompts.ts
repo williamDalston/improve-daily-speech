@@ -312,3 +312,104 @@ Be specific and reference exact concepts from the episode.`,
     temperature: 0.5,
   },
 } as const;
+
+// ============================================================================
+// Canon Protocol — Remaster Prompts
+// ============================================================================
+
+/**
+ * Canon Remaster: takes an existing good episode and elevates it to
+ * "best-in-class" quality suitable for indefinite caching and serving.
+ *
+ * The remaster gets the original transcript + research as seed material,
+ * but rewrites from scratch with higher standards.
+ */
+export function getCanonRemasterPrompt(
+  topic: string,
+  research: string,
+  seedTranscript: string,
+  length: EpisodeLength
+) {
+  const config = EPISODE_LENGTHS[length];
+
+  return {
+    system: `You are an award-winning documentary scriptwriter creating the definitive audio episode on a topic. This script will be cached and served to thousands of listeners — it must be exceptional.
+
+You have access to research AND a previous draft transcript. Use the draft as structural inspiration but rewrite from scratch with higher standards. Every sentence must earn its place.`,
+    user: `Topic: "${topic}"
+
+Research brief (authoritative source material):
+${research}
+
+Previous draft (structural reference — rewrite, do not copy):
+${seedTranscript}
+
+---
+
+Write the DEFINITIVE ${config.minutes}-minute documentary script (${config.wordsMin}–${config.wordsMax} words).
+
+CANON QUALITY STANDARDS (non-negotiable):
+1. OPENING: Must be genuinely captivating. A specific, surprising detail that creates immediate tension. No clichés.
+2. STRUCTURE: Clear narrative arc — setup, escalation, turn, resolution. The listener should feel momentum.
+3. CONCRETE DENSITY: Every 2–3 sentences must include a specific detail (name, date, number, study, mechanism).
+4. SCENE MOMENTS: 3–4 immersive "theater of the mind" beats. Use the scene seeds from research. No invented specifics.
+5. TRANSITIONS: Each section flows naturally into the next. No "firstly/secondly" or listy structures.
+6. VOICE: Smart, warm, confident. Like a brilliant friend explaining something they love. Not academic, not dumbed-down.
+7. AUDIO FLOW: Sentences designed for spoken delivery. Natural breathing points. Rhythmic variety.
+8. ENDING: Must resonate. Leave the listener thinking. No generic "so next time you..." wrap-ups.
+
+BANNED:
+- Generic praise words without showing why ("fascinating", "incredible", "revolutionary")
+- Claims not in the research brief
+- Dictionary definitions as openers
+- Rhetorical questions without immediate payoff
+- Any AI-sounding patterns
+
+Output the script only. Continuous prose, no headers or commentary.`,
+    temperature: 0.7,
+  };
+}
+
+/**
+ * Canon Quality Gate: scored evaluation of a remastered script.
+ * Must pass all dimensions above threshold to be promoted to canon.
+ */
+export const CANON_QUALITY_GATE = {
+  system: `You are an exacting quality reviewer for a premium audio platform. You evaluate scripts that will be permanently cached and served to thousands. Your standards are high and specific.`,
+  userTemplate: `Topic: "{topic}"
+
+Script to evaluate:
+{script}
+
+Score this script 1–10 on each dimension:
+
+1. HOOK (first 30 seconds): Is it genuinely captivating? Does it create tension?
+2. ACCURACY: Are all claims supported? Any suspicious specifics?
+3. AUDIO FLOW: Sentence rhythm, breathing points, spoken cadence?
+4. SPECIFICITY: Concrete details vs vague generalities?
+5. HUMAN VOICE: Does it sound human or AI-generated?
+6. NARRATIVE ARC: Clear structure with momentum?
+7. MEMORABILITY: Will the listener remember this tomorrow?
+
+Return JSON:
+{
+  "scores": {
+    "hook": N,
+    "accuracy": N,
+    "audioFlow": N,
+    "specificity": N,
+    "humanVoice": N,
+    "narrativeArc": N,
+    "memorability": N
+  },
+  "average": N,
+  "pass": true/false,
+  "weakest": "dimension name",
+  "suggestion": "one specific improvement if not passing"
+}
+
+PASS threshold: average >= 7.0 AND no single score below 5.`,
+  temperature: 0.3,
+  passThreshold: 7.0,
+  minDimensionScore: 5,
+} as const;

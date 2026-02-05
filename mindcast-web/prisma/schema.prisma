@@ -110,12 +110,13 @@ model User {
   feedToken       String?   @unique @map("feed_token") // Secure token for RSS feed access
 
   // Relations
-  accounts  Account[]
-  sessions  Session[]
-  episodes  Episode[]
-  reflects  Reflect[]
-  jobs      Job[]
-  playlists Playlist[]
+  accounts      Account[]
+  sessions      Session[]
+  episodes      Episode[]
+  reflects      Reflect[]
+  jobs          Job[]
+  playlists     Playlist[]
+  topicRequests TopicRequest[]
 
   @@map("users")
 }
@@ -161,15 +162,22 @@ model Episode {
   reviewCount      Int       @default(0) @map("review_count")
   reviewInterval   Int       @default(1) @map("review_interval") // Days until next review
 
+  // Canon Protocol
+  isCanon Boolean @default(false) @map("is_canon")
+  topicId String? @map("topic_id")
+
   // Relations
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   reflects         Reflect[]
   job              Job?
   playlistEpisodes PlaylistEpisode[]
   reviews          EpisodeReview[]
+  canonTopic       Topic?            @relation("EpisodeToTopic", fields: [topicId], references: [id], onDelete: SetNull)
+  canonOf          Topic?            @relation("CanonEpisodeOfTopic")
 
   @@index([userId, createdAt])
   @@index([userId, nextReviewAt])
+  @@index([topicId])
   @@map("episodes")
 }
 
@@ -208,6 +216,10 @@ model Job {
   startedAt   DateTime? @map("started_at")
   completedAt DateTime? @map("completed_at")
 
+  // Canon Protocol: cost tracking
+  costCents        Int?   @map("cost_cents")        // Total generation cost in cents
+  minutesGenerated Float? @map("minutes_generated")  // Audio minutes produced
+
   // Intermediate results (survive crashes/disconnects)
   quickHook    Json?     @map("quick_hook") // { hook, preview, funFact }
   research     String?   @db.Text
@@ -237,6 +249,34 @@ enum JobStatus {
   ENHANCING
   AUDIO
   COMPLETE
+  FAILED
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CANON PROTOCOL ENUMS
+// ══════════════════════════════════════════════════════════════════════════════
+
+enum TopicStatus {
+  CANDIDATE // New topic, collecting signals
+  CANON     // Promoted to permanent library
+  COLD      // Demoted, moved to cold storage
+}
+
+enum RequestType {
+  PERSONAL  // Contains PII or private context — never canonize
+  CANDIDATE // Eligible for canon promotion
+}
+
+enum SupportSeverity {
+  BLOCKER    // Factually invented, must fix
+  SHOULD_FIX // Stretched beyond brief
+  MINOR      // Stylistic overreach, optional
+}
+
+enum CanonJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
   FAILED
 }
 
@@ -328,4 +368,157 @@ model EpisodeReview {
 
   @@index([episodeId, createdAt])
   @@map("episode_reviews")
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CANON PROTOCOL — Topic, Signals, Metrics, Remastering
+// ══════════════════════════════════════════════════════════════════════════════
+
+model Topic {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Content
+  slug          String  @unique                // URL-safe normalized topic key
+  title         String                         // Display title
+  description   String? @db.Text               // AI-generated description
+
+  // Embedding for similarity search (deferred pgvector — stored as JSON float array)
+  embedding      Json?                         // Float[] for cosine similarity
+  embeddingModel String? @map("embedding_model") // e.g. "text-embedding-3-small"
+
+  // Status & lifecycle
+  status TopicStatus @default(CANDIDATE)
+
+  // Signal counters (denormalized for fast reads, synced from TopicRequest)
+  requestCount   Int   @default(0) @map("request_count")
+  uniqueUsers    Int   @default(0) @map("unique_users")
+  completionRate Float @default(0) @map("completion_rate") // Median 0..1
+  saveRate       Float @default(0) @map("save_rate")       // % who save
+
+  // Canon promotion
+  canonScore      Float?    @map("canon_score")        // Composite quality score
+  canonEpisodeId  String?   @unique @map("canon_episode_id")
+  canonPromotedAt DateTime? @map("canon_promoted_at")
+
+  // Lifecycle policy
+  isFastMoving Boolean @default(false) @map("is_fast_moving")
+  canonTTLDays Int?    @map("canon_ttl_days") // TTL for fast-moving topics
+
+  // Relations
+  canonEpisode Episode?          @relation("CanonEpisodeOfTopic", fields: [canonEpisodeId], references: [id], onDelete: SetNull)
+  episodes     Episode[]         @relation("EpisodeToTopic")
+  requests     TopicRequest[]
+  supportFlags SupportFlag[]
+  dailyMetrics TopicMetricDaily[]
+  canonJobs    CanonJob[]
+
+  @@index([status])
+  @@index([requestCount])
+  @@map("topics")
+}
+
+model TopicRequest {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Who requested
+  topicId String @map("topic_id")
+  userId  String @map("user_id")
+
+  // Request classification
+  type     RequestType @default(CANDIDATE)
+  cacheHit Boolean     @default(false) @map("cache_hit")
+
+  // Engagement signals
+  completionPct Float?  @map("completion_pct") // 0.0–1.0
+  saved         Boolean @default(false)
+  replayed      Boolean @default(false)
+  rating        Int?                            // 1–5 if reviewed
+
+  // Cost attribution
+  costCents Int? @map("cost_cents")
+
+  // Episode link (if a new episode was generated)
+  episodeId String? @map("episode_id")
+
+  // Relations
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([topicId, createdAt])
+  @@index([topicId, cacheHit])
+  @@map("topic_requests")
+}
+
+model SupportFlag {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Context
+  topicId   String  @map("topic_id")
+  episodeId String? @map("episode_id")
+
+  // Issue details
+  claim      String          @db.Text
+  severity   SupportSeverity
+  issue      String?                   // unsupported | overstated | too_specific
+  suggestion String?         @db.Text  // Suggested fix
+  resolved   Boolean         @default(false)
+  resolvedAt DateTime?       @map("resolved_at")
+
+  // Relations
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId, severity])
+  @@index([resolved])
+  @@map("support_flags")
+}
+
+model TopicMetricDaily {
+  id      String   @id @default(cuid())
+  topicId String   @map("topic_id")
+  day     DateTime @db.Date
+
+  // Counters
+  requests       Int @default(0)
+  cacheHits      Int @default(0) @map("cache_hits")
+  uniqueUsers    Int @default(0) @map("unique_users")
+  completions    Int @default(0)
+  saves          Int @default(0)
+  totalCostCents Int @default(0) @map("total_cost_cents")
+
+  // Relations
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([topicId, day])
+  @@index([day])
+  @@map("topic_metrics_daily")
+}
+
+model CanonJob {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  topicId String @map("topic_id")
+
+  // Status
+  status      CanonJobStatus @default(QUEUED)
+  error       String?        @db.Text
+  startedAt   DateTime?      @map("started_at")
+  completedAt DateTime?      @map("completed_at")
+
+  // Result
+  episodeId String? @map("episode_id")
+  costCents Int?    @map("cost_cents")
+
+  // Relations
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+  @@index([status])
+  @@map("canon_jobs")
 }

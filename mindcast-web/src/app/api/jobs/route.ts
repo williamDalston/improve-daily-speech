@@ -6,6 +6,7 @@ import { canCreateEpisode } from '@/lib/stripe';
 import { processJob } from '@/lib/jobs/processor';
 import { checkRateLimit, rateLimits, rateLimitedResponse, getRateLimitHeaders } from '@/lib/rate-limit';
 import { sanitizeTopic, sanitizeContext, hasInappropriateContent } from '@/lib/sanitize';
+import { checkCanonCache, cloneCanonEpisode, recordRequest } from '@/lib/canon';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max for Vercel
@@ -50,11 +51,82 @@ export async function POST(request: NextRequest) {
   // Style is an optional tone/perspective modifier
   const stylePrompt = typeof style === 'string' ? sanitizeContext(style) : '';
 
-  // Check if user can create episode
+  // Canon Protocol: check for cache hit BEFORE access check.
+  // Canon episodes are free for everyone — no tier gating.
+  try {
+    const cacheHit = await checkCanonCache(topic);
+    if (cacheHit) {
+      // Clone the canon episode for this user (instant, no AI cost)
+      const cloned = await cloneCanonEpisode(
+        cacheHit.canonEpisode,
+        session.user.id,
+        cacheHit.topicId
+      );
+
+      // Create an instant-complete job so the frontend flow works unchanged
+      const cacheJob = await db.job.create({
+        data: {
+          userId: session.user.id,
+          topic,
+          length: cacheHit.canonEpisode.length,
+          voice: cacheHit.canonEpisode.voice,
+          status: 'COMPLETE',
+          progress: 100,
+          currentStep: 'Canon cache hit',
+          episodeId: cloned.id,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          costCents: 0,
+        },
+      });
+
+      // Record the cache-hit request (async, non-blocking)
+      waitUntil(
+        recordRequest({
+          topicId: cacheHit.topicId,
+          userId: session.user.id,
+          episodeId: cloned.id,
+          costCents: 0,
+          cacheHit: true,
+        }).catch((e) => console.warn('Canon cache-hit tracking failed:', e))
+      );
+
+      return NextResponse.json(
+        {
+          jobId: cacheJob.id,
+          status: 'COMPLETE',
+          message: 'Canon episode served instantly',
+          cacheHit: true,
+        },
+        { headers: getRateLimitHeaders(rateLimit) }
+      );
+    }
+  } catch (e) {
+    // Cache check failure should never block generation
+    console.warn('Canon cache check failed:', e);
+  }
+
+  // Check if user can create a NEW episode (tier-gated — only for fresh generation)
   const access = await canCreateEpisode(session.user.id);
   if (!access.allowed) {
+    // Count available canon topics to suggest in the error
+    let canonCount = 0;
+    try {
+      canonCount = await db.topic.count({
+        where: { status: 'CANON', canonEpisodeId: { not: null } },
+      });
+    } catch {
+      // Non-critical
+    }
+
     return NextResponse.json(
-      { error: access.reason, needsUpgrade: true },
+      {
+        error: access.reason,
+        needsUpgrade: true,
+        ...(canonCount > 0
+          ? { canonAvailable: canonCount, hint: 'Try a popular topic for instant access, or upgrade for unlimited custom episodes.' }
+          : {}),
+      },
       { status: 403 }
     );
   }

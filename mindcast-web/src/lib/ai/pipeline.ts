@@ -16,6 +16,8 @@ import {
   PRONUNCIATION_PROMPT,
   LEARNING_ADDONS,
   PROMPT_VERSION,
+  getCanonRemasterPrompt,
+  CANON_QUALITY_GATE,
   type EpisodeLength,
 } from './prompts';
 
@@ -414,4 +416,114 @@ export async function generateAddon(
     promptVersion: PROMPT_VERSION,
     purpose: `addon:${addonKey}`,
   });
+}
+
+// ============================================================================
+// Canon Protocol — Remaster Pipeline
+// ============================================================================
+
+/**
+ * Run the canon remaster: research → remaster draft → enhancement → quality gate.
+ * Uses the existing transcript as a seed but rewrites to higher standards.
+ */
+export async function runCanonRemaster(
+  topic: string,
+  seedTranscript: string,
+  length: EpisodeLength = '10 min'
+): Promise<{
+  finalText: string;
+  research: string;
+  qualityGate: { pass: boolean; scores: Record<string, number>; average: number; weakest?: string; suggestion?: string };
+}> {
+  // 1. Fresh research (canon episodes need the latest data)
+  const research = await runResearch(topic, length);
+
+  // 2. Canon remaster draft (uses seed transcript + fresh research)
+  const remasterPrompt = getCanonRemasterPrompt(topic, research, seedTranscript, length);
+  let remasteredText = await callLLM({
+    provider: 'anthropic',
+    system: remasterPrompt.system,
+    user: remasterPrompt.user,
+    temperature: remasterPrompt.temperature,
+    promptVersion: PROMPT_VERSION,
+    purpose: 'canon-remaster',
+  });
+
+  // 3. Support check
+  const supportResult = await runSupportCheck(research, remasteredText);
+  if (!supportResult.ok) {
+    console.log('[Canon] Support check flagged issues, proceeding with enhancement to address');
+  }
+
+  // 4. Enhancement passes (same as regular pipeline)
+  for (let i = 0; i < ENHANCEMENT_STAGES.length; i++) {
+    remasteredText = await runEnhancementStage(i, topic, research, remasteredText);
+  }
+
+  // 5. Quality gate
+  const qualityGate = await runCanonQualityGate(topic, remasteredText);
+
+  return {
+    finalText: remasteredText,
+    research,
+    qualityGate,
+  };
+}
+
+/**
+ * Run the canon quality gate evaluation on a script.
+ */
+export async function runCanonQualityGate(
+  topic: string,
+  script: string
+): Promise<{
+  pass: boolean;
+  scores: Record<string, number>;
+  average: number;
+  weakest?: string;
+  suggestion?: string;
+}> {
+  const result = await callLLM({
+    provider: 'openai',
+    model: FAST_OPENAI_MODEL,
+    system: CANON_QUALITY_GATE.system,
+    user: CANON_QUALITY_GATE.userTemplate
+      .replace('{topic}', topic)
+      .replace('{script}', script),
+    temperature: CANON_QUALITY_GATE.temperature,
+    maxTokens: 1024,
+    promptVersion: PROMPT_VERSION,
+    purpose: 'canon-quality-gate',
+  });
+
+  try {
+    // Extract JSON from response (may have markdown fences)
+    const jsonMatch = result.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn('[Canon QG] Could not parse quality gate response');
+      return { pass: false, scores: {}, average: 0, suggestion: 'Failed to parse quality gate' };
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const scores: Record<string, number> = parsed.scores || {};
+    const scoreValues = Object.values(scores).filter((v): v is number => typeof v === 'number');
+    const average = scoreValues.length > 0
+      ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length
+      : 0;
+
+    const minScore = scoreValues.length > 0 ? Math.min(...scoreValues) : 0;
+    const pass = average >= CANON_QUALITY_GATE.passThreshold &&
+                 minScore >= CANON_QUALITY_GATE.minDimensionScore;
+
+    return {
+      pass,
+      scores,
+      average,
+      weakest: parsed.weakest,
+      suggestion: parsed.suggestion,
+    };
+  } catch (e) {
+    console.warn('[Canon QG] JSON parse error:', e);
+    return { pass: false, scores: {}, average: 0, suggestion: 'Quality gate parse error' };
+  }
 }
