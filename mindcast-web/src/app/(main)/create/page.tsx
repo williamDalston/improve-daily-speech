@@ -624,6 +624,20 @@ export default function CreatePage() {
   const handleGenerate = useCallback(async () => {
     if (!topic.trim()) return;
 
+    // Unlock mobile audio playback — must happen synchronously within user gesture.
+    // Mobile browsers block audio.play() unless triggered by a direct user interaction.
+    // This silent play "warms" the page-level audio policy so InstantHost TTS works later.
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') ctx.resume();
+      }
+      const silence = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+      silence.volume = 0.01;
+      silence.play().then(() => { try { silence.remove(); } catch {} }).catch(() => {});
+    } catch {}
+
     if (!session?.user) {
       // Save topic to localStorage so it persists across login
       localStorage.setItem('mindcast_pending_topic', topic);

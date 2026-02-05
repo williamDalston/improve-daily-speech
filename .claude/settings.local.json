@@ -35,7 +35,18 @@
       "Bash(npx prisma db push:*)",
       "Bash(head:*)",
       "Bash(npm run lint:*)",
-      "Bash(npx next build:*)"
+      "Bash(npx next build:*)",
+      "Bash(git -C \"c:\\\\Users\\\\farad\\\\OneDrive\\\\Desktop\\\\Speech\" log --oneline -5)",
+      "Bash(git -C \"c:\\\\Users\\\\farad\\\\OneDrive\\\\Desktop\\\\Speech\" status --short)",
+      "Bash(git status:*)",
+      "Bash(netstat:*)",
+      "Bash(npx next build)",
+      "Bash(npx kill-port 3099)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(powershell.exe -Command \"Get-NetTCPConnection -LocalPort 3099 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }\")",
+      "Bash(npx next dev:*)",
+      "Bash(wc:*)"
     ]
   }
 }

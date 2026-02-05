@@ -201,6 +201,39 @@ export function InstantHost({
   const phaseCountRef = useRef(0); // Track how many phases we've done
   const conversationLoadedRef = useRef(false);
   const textInputRef = useRef<HTMLInputElement | null>(null);
+  const audioUnlockedRef = useRef(false);
+
+  // Initialize audio element eagerly so it's ready for playback
+  useEffect(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+  }, []);
+
+  // Unlock mobile audio on any user interaction within this component.
+  // This is a fallback — the primary unlock happens in handleGenerate on the create page.
+  const unlockAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') ctx.resume();
+      }
+      if (audioRef.current) {
+        audioRef.current.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        audioRef.current.volume = 0.01;
+        audioRef.current.play().then(() => {
+          if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.volume = 1;
+            audioRef.current.src = '';
+          }
+        }).catch(() => {});
+      }
+    } catch {}
+  }, []);
 
   // Check if chat mode is active (user has chosen to interact)
   const isChatMode = micPermissionAsked && (micEnabled || showTextInput);
@@ -429,6 +462,7 @@ export function InstantHost({
         const data = await response.json();
         text = data.text;
       }
+      if (!text) throw new Error('No text received');
       setCurrentText(text);
       setConversationHistory([{ role: 'host', text }]);
 
@@ -446,8 +480,8 @@ export function InstantHost({
         const audioUrl = URL.createObjectURL(audioBlob);
         audioUrlRef.current = audioUrl;
 
-        const audio = audioRef.current ?? new Audio();
-        audioRef.current = audio;
+        if (!audioRef.current) audioRef.current = new Audio();
+        const audio = audioRef.current;
         audio.src = audioUrl;
 
         audio.onplay = () => setIsPlaying(true);
@@ -467,7 +501,13 @@ export function InstantHost({
         audio.onerror = () => setIsPlaying(false);
 
         await new Promise(resolve => setTimeout(resolve, 300));
-        await audio.play();
+        try {
+          await audio.play();
+        } catch {
+          // Retry once for mobile autoplay unlock timing
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await audio.play();
+        }
       }
     } catch (err) {
       console.error('Conversation start error:', err);
@@ -539,8 +579,8 @@ export function InstantHost({
           const audioUrl = URL.createObjectURL(audioBlob);
           audioUrlRef.current = audioUrl;
 
-          const audio = audioRef.current ?? new Audio();
-          audioRef.current = audio;
+          if (!audioRef.current) audioRef.current = new Audio();
+          const audio = audioRef.current;
           audio.src = audioUrl;
 
           audio.onplay = () => setIsPlaying(true);
@@ -560,7 +600,13 @@ export function InstantHost({
 
           // Small delay to let browser buffer audio - prevents missing first words
           await new Promise(resolve => setTimeout(resolve, 300));
-          await audio.play();
+          try {
+            await audio.play();
+          } catch {
+            // Retry once for mobile autoplay unlock timing
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await audio.play();
+          }
         }
       } else {
         setIsLoadingAudio(false);
@@ -771,8 +817,8 @@ export function InstantHost({
       const audioUrl = URL.createObjectURL(audioBlob);
       audioUrlRef.current = audioUrl;
 
-      const audio = audioRef.current ?? new Audio();
-      audioRef.current = audio;
+      if (!audioRef.current) audioRef.current = new Audio();
+      const audio = audioRef.current;
       audio.src = audioUrl;
 
       audio.onplay = () => setIsPlaying(true);
@@ -793,10 +839,16 @@ export function InstantHost({
         // This prevents missing the first few words
         await new Promise(resolve => setTimeout(resolve, 300));
         await audio.play();
-      } catch {
-        // If play fails, skip to next phase (no robotic fallback)
-        console.warn('Audio play failed, skipping');
-        handlePhaseEnd();
+      } catch (playError) {
+        // Retry once — the audio unlock from the Generate button may need a moment
+        console.warn('Audio play failed, retrying...', playError);
+        try {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await audio.play();
+        } catch {
+          console.warn('Audio play retry failed, skipping to next phase');
+          handlePhaseEnd();
+        }
       }
     } catch (err) {
       console.error('Instant host error:', err);
@@ -897,7 +949,10 @@ export function InstantHost({
   if (!isGenerating || error) return null;
 
   return (
-    <div className={cn(
+    <div
+      onTouchStart={unlockAudio}
+      onClick={unlockAudio}
+      className={cn(
       "rounded-xl border-2 border-brand/30 bg-gradient-to-br from-brand/10 via-brand/5 to-transparent p-4",
       showStickyBar && "pb-2" // Less bottom padding when sticky bar handles input
     )}>
