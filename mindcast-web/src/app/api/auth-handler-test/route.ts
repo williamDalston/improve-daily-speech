@@ -4,6 +4,11 @@ import { NextRequest } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
+  // Block in production — debug endpoint only
+  if (process.env.NODE_ENV === 'production') {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const checks: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
   };

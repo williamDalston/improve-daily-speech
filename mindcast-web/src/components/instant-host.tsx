@@ -402,27 +402,33 @@ export function InstantHost({
   }, [isStopped, isMuted, micEnabled]);
 
   // Start a proactive conversation - AI asks the first question immediately
-  const startProactiveConversation = useCallback(async () => {
+  // Accepts optional pre-fetched text to skip the API call (used when pre-fetching during mic permission)
+  const startProactiveConversation = useCallback(async (prefetchedText?: string) => {
     if (isStopped || isMuted) return;
 
     setPhase('responding');
     setIsLoadingAudio(true);
 
     try {
-      // Get AI to ask an engaging question about the topic
-      const response = await fetch('/api/instant-host/respond', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topic,
-          userMessage: '__START_CONVERSATION__', // Special flag for initial question
-          conversationHistory: [],
-        }),
-      });
+      let text = prefetchedText;
 
-      if (!response.ok) throw new Error('Failed to get conversation starter');
+      if (!text) {
+        // Get AI to ask an engaging question about the topic
+        const response = await fetch('/api/instant-host/respond', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic,
+            userMessage: '__START_CONVERSATION__', // Special flag for initial question
+            conversationHistory: [],
+          }),
+        });
 
-      const { text } = await response.json();
+        if (!response.ok) throw new Error('Failed to get conversation starter');
+
+        const data = await response.json();
+        text = data.text;
+      }
       setCurrentText(text);
       setConversationHistory([{ role: 'host', text }]);
 
@@ -644,6 +650,12 @@ export function InstantHost({
       setIsLoadingAudio(true);
       stopAudioPlayback();
 
+      // Intro: show instant teaser so UI feels alive from second zero
+      if (targetPhase === 'intro') {
+        const shortTopic = topic.length > 40 ? topic.slice(0, 40) + '...' : topic;
+        setCurrentText(`Alright, let\u2019s explore ${shortTopic}`);
+      }
+
       // Get topic-specific content from API
       const response = await fetch('/api/instant-host', {
         method: 'POST',
@@ -681,10 +693,23 @@ export function InstantHost({
             // Mobile: show loading immediately, auto-request mic — no tap needed
             setPhase('responding');
             setIsLoadingAudio(true);
-            requestMicPermission().then((granted) => {
-              // Whether granted or denied, start the conversation
-              // (denied auto-falls back to text input via requestMicPermission)
-              startProactiveConversation();
+
+            // Pre-fetch conversation text while mic permission dialog is showing
+            // This saves 1-3 seconds — text is ready the moment user taps Allow
+            const textPromise = fetch('/api/instant-host/respond', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic,
+                userMessage: '__START_CONVERSATION__',
+                conversationHistory: [],
+              }),
+            }).then(res => res.ok ? res.json() : null).catch(() => null);
+
+            requestMicPermission().then(async () => {
+              const result = await textPromise;
+              // Pass pre-fetched text so it skips the API call and goes straight to TTS
+              startProactiveConversation(result?.text);
             });
           } else {
             setPhase('listening'); // Desktop: show permission prompt
@@ -719,6 +744,12 @@ export function InstantHost({
         }
       };
 
+      // Safety net: if TTS takes >4s, auto-show transcript so users aren't staring at a spinner
+      const ttsTimer = setTimeout(() => {
+        setShowTranscript(true);
+        setIsLoadingAudio(false); // Hide spinner, text is visible
+      }, 4000);
+
       // Use fast TTS on mobile for quicker time-to-first-sound
       const ttsResponse = await fetch('/api/instant-host/tts', {
         method: 'POST',
@@ -726,6 +757,7 @@ export function InstantHost({
         body: JSON.stringify({ text, deviceType }),
       });
 
+      clearTimeout(ttsTimer);
       setIsLoadingAudio(false);
 
       if (!ttsResponse.ok) {

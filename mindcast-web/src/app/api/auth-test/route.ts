@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
+  // Block in production — debug endpoint only
+  if (process.env.NODE_ENV === 'production') {
+    return new NextResponse(null, { status: 404 });
+  }
+
   const checks: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
   };

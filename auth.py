@@ -31,8 +31,9 @@ except Exception:
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
-# Allow HTTP for local development (remove in production)
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+# Allow HTTP for local development only
+if os.getenv("ENVIRONMENT", "development") != "production":
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 
 def _get_redirect_uri() -> str:
