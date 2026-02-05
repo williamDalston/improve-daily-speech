@@ -90,7 +90,7 @@ interface InstantHostProps {
   isGenerating: boolean;
   episodeReady: boolean;
   onReadyToPlay: () => void;
-  introTextPromise?: Promise<string | null> | null;
+  introTextPromise?: Promise<{ text: string; audioBlob: Blob | null } | null> | null;
 }
 
 type HostPhase = 'idle' | 'intro' | 'deep_dive' | 'curiosity' | 'almost_ready' | 'asking' | 'listening' | 'responding';
@@ -155,7 +155,7 @@ export function InstantHost({
   onReadyToPlay,
   introTextPromise,
 }: InstantHostProps) {
-  const { type: deviceType, isMobile } = useDevice();
+  const { isMobile } = useDevice();
   const [phase, setPhase] = useState<HostPhase>('idle');
   const [currentText, setCurrentText] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
@@ -472,11 +472,11 @@ export function InstantHost({
       setCurrentText(text);
       setConversationHistory([{ role: 'host', text }]);
 
-      // Generate TTS for the question (use fast mode on mobile)
+      // Generate TTS for the question
       const ttsResponse = await fetch('/api/instant-host/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, deviceType }),
+        body: JSON.stringify({ text }),
       });
 
       setIsLoadingAudio(false);
@@ -521,7 +521,7 @@ export function InstantHost({
         startListening();
       }
     }
-  }, [topic, isStopped, isMuted, micEnabled, episodeReady, startListening, deviceType]);
+  }, [topic, isStopped, isMuted, micEnabled, episodeReady, startListening]);
 
   // Pause listening temporarily (for when AI is speaking)
   const pauseListening = useCallback(() => {
@@ -567,12 +567,12 @@ export function InstantHost({
       // Add host response to history
       setConversationHistory(prev => [...prev, { role: 'host', text }]);
 
-      // Generate TTS for response (use fast mode on mobile)
+      // Generate TTS for response
       if (!isMuted) {
         const ttsResponse = await fetch('/api/instant-host/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, deviceType }),
+          body: JSON.stringify({ text }),
         });
 
         setIsLoadingAudio(false);
@@ -618,7 +618,7 @@ export function InstantHost({
       // Fall back to regular phase flow
       setPhase('curiosity');
     }
-  }, [topic, conversationHistory, isStopped, isMuted, micEnabled, episodeReady, pauseListening, startListening, deviceType]);
+  }, [topic, conversationHistory, isStopped, isMuted, micEnabled, episodeReady, pauseListening, startListening]);
 
   // Keep ref updated with latest handleUserInput (for speech recognition callback)
   useEffect(() => {
@@ -703,12 +703,14 @@ export function InstantHost({
         setCurrentText(`Alright, let\u2019s explore ${shortTopic}`);
       }
 
-      // For intro phase, use pre-fetched text from handleGenerate (already in flight)
+      // For intro phase, use pre-fetched text + audio from handleGenerate (already in flight)
       let text: string;
+      let prefetchedAudioBlob: Blob | null = null;
       if (targetPhase === 'intro' && introTextPromise) {
         const prefetched = await introTextPromise;
         if (prefetched) {
-          text = prefetched;
+          text = prefetched.text;
+          prefetchedAudioBlob = prefetched.audioBlob;
         } else {
           // Pre-fetch failed, fall back to fresh fetch
           const response = await fetch('/api/instant-host', {
@@ -811,24 +813,30 @@ export function InstantHost({
         setIsLoadingAudio(false); // Hide spinner, text is visible
       }, 4000);
 
-      // Use fast TTS on mobile for quicker time-to-first-sound
-      const ttsResponse = await fetch('/api/instant-host/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, deviceType }),
-      });
+      // Use pre-fetched audio blob if available (intro), otherwise fetch TTS
+      let audioBlob: Blob;
+      if (prefetchedAudioBlob) {
+        clearTimeout(ttsTimer);
+        setIsLoadingAudio(false);
+        audioBlob = prefetchedAudioBlob;
+      } else {
+        const ttsResponse = await fetch('/api/instant-host/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
 
-      clearTimeout(ttsTimer);
-      setIsLoadingAudio(false);
+        clearTimeout(ttsTimer);
+        setIsLoadingAudio(false);
 
-      if (!ttsResponse.ok) {
-        // If TTS fails, just skip to next phase silently (no robotic fallback)
-        console.warn('TTS failed, skipping audio');
-        handlePhaseEnd();
-        return;
+        if (!ttsResponse.ok) {
+          console.warn('TTS failed, skipping audio');
+          handlePhaseEnd();
+          return;
+        }
+
+        audioBlob = await ttsResponse.blob();
       }
-
-      const audioBlob = await ttsResponse.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
       audioUrlRef.current = audioUrl;
 
@@ -869,7 +877,7 @@ export function InstantHost({
       setIsLoadingAudio(false);
       setError('Could not start voice host');
     }
-  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening, deviceType, isMobile, requestMicPermission, startProactiveConversation, introTextPromise]);
+  }, [topic, isMuted, isStopped, micEnabled, micPermissionAsked, showTextInput, episodeReady, phase, isListening, stopAudioPlayback, startListening, isMobile, requestMicPermission, startProactiveConversation, introTextPromise]);
 
   // Start when generation begins — fires immediately (no artificial delay)
   useEffect(() => {

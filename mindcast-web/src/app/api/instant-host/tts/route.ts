@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateAudio } from '@/lib/ai/tts';
+import OpenAI from 'openai';
 
 export const runtime = 'nodejs';
 
+let openai: OpenAI | null = null;
+function getClient(): OpenAI {
+  if (!openai) openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return openai;
+}
+
 // POST /api/instant-host/tts - Generate TTS for instant host
-// Always uses tts-1 (fast mode) — instant host is short conversational phrases
-// where speed matters more than HD quality. HD is reserved for final episode audio.
+// Calls OpenAI directly and streams the response — no server-side buffering.
+// Always uses tts-1 (fast mode) for short conversational phrases.
 export async function POST(request: NextRequest) {
   try {
     const { text } = await request.json();
@@ -23,16 +29,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Text too long' }, { status: 413 });
     }
 
-    // Always use fast TTS (tts-1) for instant host — ~2x faster than tts-1-hd
-    // Quality difference is negligible for short conversational phrases (35-55 words)
-    const audioBuffer = await generateAudio(trimmed, {
-      provider: 'openai',
+    const client = getClient();
+    const response = await client.audio.speech.create({
+      model: 'tts-1',
       voice: 'nova',
+      input: trimmed,
       speed: 1.0,
-      fastMode: true,
+      response_format: 'mp3',
     });
 
-    return new NextResponse(new Uint8Array(audioBuffer), {
+    // Stream directly to client — avoids server-side buffer copy
+    if (!response.body) {
+      return NextResponse.json({ error: 'No audio data' }, { status: 500 });
+    }
+
+    return new NextResponse(response.body as ReadableStream, {
       headers: {
         'Content-Type': 'audio/mpeg',
         'Cache-Control': 'no-store',

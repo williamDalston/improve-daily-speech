@@ -338,7 +338,7 @@ export default function CreatePage() {
   const [pendingAutoGenerate, setPendingAutoGenerate] = useState(false); // Track if we should auto-start
   const [isGenerating, setIsGenerating] = useState(false);
   const [episodeReady, setEpisodeReady] = useState(false);
-  const introTextPromiseRef = useRef<Promise<string | null> | null>(null);
+  const introTextPromiseRef = useRef<Promise<{ text: string; audioBlob: Blob | null } | null> | null>(null);
   const [autoPlayEpisode, setAutoPlayEpisode] = useState(false);
   const [steps, setSteps] = useState<PipelineStep[]>(PIPELINE_STEPS);
   const [error, setError] = useState<string | null>(null);
@@ -690,13 +690,30 @@ export default function CreatePage() {
     abortControllerRef.current?.abort();
     abortControllerRef.current = new AbortController();
 
-    // Pre-fetch intro text immediately — runs in parallel with job creation
-    // so InstantHost can skip the text API call and go straight to TTS
+    // Pre-fetch intro text AND audio in parallel with job creation.
+    // By the time InstantHost starts, the audio blob is already ready to play.
     introTextPromiseRef.current = fetch('/api/instant-host', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic: fullTopic, phase: 'intro' }),
-    }).then(r => r.ok ? r.json() : null).then(d => d?.text || null).catch(() => null);
+    }).then(async r => {
+      if (!r.ok) return null;
+      const d = await r.json();
+      const text = d?.text;
+      if (!text) return null;
+      try {
+        const ttsRes = await fetch('/api/instant-host/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        if (!ttsRes.ok) return { text, audioBlob: null };
+        const audioBlob = await ttsRes.blob();
+        return { text, audioBlob };
+      } catch {
+        return { text, audioBlob: null };
+      }
+    }).catch(() => null);
 
     setIsGenerating(true);
     setEpisodeReady(false);
